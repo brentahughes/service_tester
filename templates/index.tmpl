@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Service Tester</title>
+  </head>
+  <body>
+    <table>
+      <tr>
+        <td>Host</td>
+        <td>Done</td>
+    	</tr>
+			{{ range .Checks }}
+        <tr>
+          <td>{{ .Name }}</td>
+          <td>{{ .Status }}</td>
+        </tr>
+			{{ end }}
+    </table>
+  </body>
+</html>

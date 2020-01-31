@@ -1,9 +1,10 @@
 package webserver
 
 import (
-	"encoding/json"
-	"github.com/brentahughes/service_tester/pkg/db"
+	"html/template"
 	"net/http"
+
+	"github.com/brentahughes/service_tester/pkg/db"
 )
 
 type indexResponse struct {
@@ -21,6 +22,17 @@ func (s *Server) handleIndex(w http.ResponseWriter, req *http.Request) {
 		Checks: checks,
 	}
 
-	response, _ := json.Marshal(r)
-	w.Write(response)
+	t, err := template.ParseFiles("templates/index.tmpl")
+	if err != nil {
+		s.writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// b, _ := json.MarshalIndent(r, "", "  ")
+	// w.Write(b)
+
+	if err := t.Execute(w, r); err != nil {
+		s.writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
 }
