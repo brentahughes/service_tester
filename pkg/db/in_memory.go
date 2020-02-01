@@ -1,14 +1,18 @@
 package db
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
 
+const checkLimit = 1000
+
 type InMemory struct {
-	latest sync.Map
-	data   sync.Map
+	lock sync.Mutex
+	data sync.Map
 }
 
 func NewInMemoryStore() *InMemory {
@@ -16,42 +20,59 @@ func NewInMemoryStore() *InMemory {
 }
 
 func (db *InMemory) Create(host HostCheck) error {
-	host.CheckTime = time.Now().UTC()
+	db.lock.Lock()
+	defer db.lock.Unlock()
 
-	checksI, ok := db.data.Load(host.Name)
-	var checks []HostCheck
+	host.ID = fmt.Sprintf("%x", sha256.Sum256([]byte(host.Name)))
+
+	data := host.Checks[0]
+	data.CheckTime = time.Now().UTC()
+	data.CheckTimeMS = data.CheckTime.Unix() * 1000
+
+	hostI, ok := db.data.Load(host.ID)
 	if ok {
-		checks = checksI.([]HostCheck)
+		host = hostI.(HostCheck)
 	}
-	checks = append(checks, host)
-	db.data.Store(host.Name, checks)
 
-	db.latest.Store(host.Name, host)
+	// Prepend the check to the begginning
+	if ok {
+		host.Checks = append([]CheckData{data}, host.Checks...)
+	} else {
+		host.Checks = []CheckData{data}
+	}
+
+	// Make sure the list doesn't go over N checks
+	if len(host.Checks) > checkLimit {
+		host.Checks = host.Checks[:checkLimit]
+	}
+
+	db.data.Store(host.ID, host)
 	return nil
 }
 
-func (db *InMemory) GetLastForAllHosts() ([]HostCheck, error) {
+func (db *InMemory) GetAllHosts() ([]HostCheck, error) {
+	db.lock.Lock()
+	defer db.lock.Unlock()
+
 	var hosts []HostCheck
-	db.latest.Range(func(key, value interface{}) bool {
-		hosts = append(hosts, value.(HostCheck))
+	db.data.Range(func(key, value interface{}) bool {
+		host := value.(HostCheck)
+		host.Latest = host.Checks[0]
+		hosts = append(hosts, host)
 		return true
 	})
 	return hosts, nil
 }
 
-func (db *InMemory) GetLastByHost(host string) (*HostCheck, error) {
-	val, ok := db.latest.Load(host)
-	if !ok {
-		return nil, errors.New("not found")
-	}
-	storedHost := val.(HostCheck)
-	return &storedHost, nil
-}
+func (db *InMemory) GetHost(id string) (*HostCheck, error) {
+	db.lock.Lock()
+	defer db.lock.Unlock()
 
-func (db *InMemory) GetAllForHost(host string) ([]HostCheck, error) {
-	checks, ok := db.data.Load(host)
+	hostI, ok := db.data.Load(id)
 	if !ok {
 		return nil, errors.New("not found")
 	}
-	return checks.([]HostCheck), nil
+
+	host := hostI.(HostCheck)
+	return &host, nil
 }

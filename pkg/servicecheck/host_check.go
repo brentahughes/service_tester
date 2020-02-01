@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"time"
 
@@ -17,50 +16,80 @@ type checkHostResponse struct {
 }
 
 func (c *Checker) checkHost(host string, port uint16) {
+	var public, internal string
+	internalStatus := db.StatusError
+	publicStatus := db.StatusError
+
+	timer := time.Now()
+	r, ok := c.checkEndpoint(host, port)
+	if ok {
+		internalStatus = db.StatusSuccess
+	}
+
+	responseTime := time.Since(timer)
+
+	if r != nil {
+		if publicIP, ok := r.Addresses["public"]; ok && publicIP != "" {
+			if _, ok := c.checkEndpoint(publicIP, port); ok {
+				publicStatus = db.StatusSuccess
+			}
+		}
+
+		internal = r.Addresses["internal"]
+		public = r.Addresses["public"]
+	}
+
+	hostCheck := db.HostCheck{
+		Name:       host,
+		InternalIP: internal,
+		PublicIP:   public,
+
+		Checks: []db.CheckData{
+			db.CheckData{
+				InternalStatus: internalStatus,
+				PublicStatus:   publicStatus,
+				ResponseTime:   responseTime,
+				ResponseTimeMS: responseTime.Milliseconds(),
+			},
+		},
+	}
+	if err := c.db.Create(hostCheck); err != nil {
+		log.Print(err)
+		return
+	}
+}
+
+func (c *Checker) checkEndpoint(host string, port uint16) (*checkHostResponse, bool) {
 	client := http.DefaultClient
 	client.Timeout = 10 * time.Second
+	defer client.CloseIdleConnections()
 
 	schema := "http"
 	if port == 443 {
 		schema = "https"
 	}
 
-	timer := time.Now()
 	resp, err := client.Get(fmt.Sprintf("%s://%s:%d/check", schema, host, port))
 	if err != nil {
 		log.Print(err)
-		return
+		return nil, false
 	}
 	defer resp.Body.Close()
 
-	status := db.StatusSuccess
 	if resp.StatusCode > 399 {
-		status = db.StatusError
+		return nil, false
 	}
 
 	checkResp := checkHostResponse{}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Print(err)
-		return
+		return nil, false
 	}
 
 	if err := json.Unmarshal(body, &checkResp); err != nil {
-		status = db.StatusError
+		return nil, false
 	}
 
-	internal := checkResp.Addresses["internal"]
-	public := checkResp.Addresses["public"]
-
-	hostCheck := db.HostCheck{
-		Name:         host,
-		Status:       status,
-		InternalIP:   net.ParseIP(internal),
-		PublicIP:     net.ParseIP(public),
-		ResponseTime: time.Since(timer),
-	}
-	if err := c.db.Create(hostCheck); err != nil {
-		log.Print(err)
-		return
-	}
+	return &checkResp, true
 }

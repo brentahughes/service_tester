@@ -13,22 +13,22 @@ import (
 )
 
 func main() {
-		c, err := config.LoadEnvConfig()
-		if err != nil {
-			log.Fatal(err)
-		}
+	c, err := config.LoadEnvConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		db := db.NewInMemoryStore()
+	db := db.NewInMemoryStore()
 
-		checker := servicecheck.NewChecker(db, c.Discovery, c.CheckInterval)
-		go checker.Start()
-		defer checker.Stop()
+	checker := servicecheck.NewChecker(db, c.Discovery, c.CheckInterval)
+	go checker.Start()
+	defer checker.Stop()
 
-		server := webserver.NewServer(db, c.Port)
-		go server.Start()
-		defer server.Stop()
+	server := webserver.NewServer(*c, db, c.Port)
+	go server.Start()
+	defer server.Stop()
 
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-		<-sig
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	<-sig
 }

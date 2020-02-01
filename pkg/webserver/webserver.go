@@ -6,12 +6,14 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/brentahughes/service_tester/pkg/config"
 	"github.com/brentahughes/service_tester/pkg/db"
 )
 
 type Server struct {
-	db   db.DB
-	port int
+	config config.Config
+	db     db.DB
+	port   int
 }
 
 type errResponse struct {
@@ -19,16 +21,20 @@ type errResponse struct {
 	Message string `json:"message"`
 }
 
-func NewServer(db db.DB, port int) *Server {
+func NewServer(config config.Config, db db.DB, port int) *Server {
 	return &Server{
-		db:   db,
-		port: port,
+		db:     db,
+		port:   port,
+		config: config,
 	}
 }
 
 func (s *Server) Start() {
 	http.HandleFunc("/", s.handleIndex)
 	http.HandleFunc("/check", s.handleCheck)
+	http.HandleFunc("/details", s.handleDetails)
+
+	http.Handle("/resources/", http.StripPrefix("/resources/", http.FileServer(http.Dir("resources"))))
 
 	log.Printf("Listing on :%d", s.port)
 	http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)

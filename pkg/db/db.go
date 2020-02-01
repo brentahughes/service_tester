@@ -1,7 +1,6 @@
 package db
 
 import (
-	"net"
 	"time"
 )
 
@@ -13,17 +12,25 @@ const (
 type Status string
 
 type HostCheck struct {
-	Name         string
-	InternalIP   net.IP
-	PublicIP     net.IP
-	Status       Status
-	ResponseTime time.Duration
-	CheckTime    time.Time
+	ID         string
+	Name       string
+	InternalIP string
+	PublicIP   string
+	Latest     CheckData
+	Checks     []CheckData
+}
+
+type CheckData struct {
+	InternalStatus Status
+	PublicStatus   Status
+	ResponseTime   time.Duration
+	ResponseTimeMS int64
+	CheckTime      time.Time
+	CheckTimeMS    int64
 }
 
 type DB interface {
 	Create(host HostCheck) error
-	GetLastForAllHosts() ([]HostCheck, error)
-	GetLastByHost(host string) (*HostCheck, error)
-	GetAllForHost(host string) ([]HostCheck, error)
+	GetAllHosts() ([]HostCheck, error)
+	GetHost(id string) (*HostCheck, error)
 }

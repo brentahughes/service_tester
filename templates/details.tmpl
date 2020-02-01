@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Service Tester</title>
+    <link rel="stylesheet" type="text/css" href="/resources/css/details.css">
+  </head>
+  <body>
+    <a href="/">back</a>
+    <br/><br/>
+
+    <b>{{ .Name }}</b>
+    <br/><br/>
+
+    <canvas id="responseTimes"></canvas>
+    <br/><br/>
+
+    <table>
+      <tr>
+        <td>Time</td>
+        <td>Public IP</td>
+        <td>Internal IP</td>
+        <td>Internal Result</td>
+        <td>Public Result</td>
+        <td>Response Time</td>
+    	</tr>
+			{{ range $check := .Checks }}
+        <tr>
+          <td>{{ $check.CheckTime }}</td>
+          <td>{{ $.PublicIP }}</td>
+          <td>{{ $.InternalIP }}</td>
+          <td class={{ $check.InternalStatus }}>{{ $check.InternalStatus }}</td>
+          <td class={{ $check.PublicStatus }}>{{ $check.PublicStatus }}</td>
+          <td>{{ $check.ResponseTime }}</td>
+        </tr>
+			{{ end }}
+    </table>
+
+
+    <script src="/resources/js/moment.js"></script>
+    <script src="/resources/js/chart.js"></script>
+    <script>
+      var data = [
+        {{- range .Checks }}
+          {
+            t: moment.unix({{- .CheckTimeMS }}),
+            y:{{- .ResponseTimeMS }}
+          },
+        {{- end }}
+      ];
+
+      var ctx = document.getElementById('responseTimes');
+      var chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            datasets: [{
+              data: data,
+              borderColor: "#3e95cd",
+              fill: true,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            legend: {
+                display: false
+            },
+            scales: {
+              xAxes: [{
+                type: 'time',
+                ticks: {
+                    autoSkip: true,
+                    maxTicksLimit: 20
+                },
+                time: {
+                  unit: 'second'
+                }
+              }],
+              yAxes: [{
+                display: true,
+                ticks: {
+                    suggestedMin: 0,
+                    beginAtZero: true
+                }
+            }]
+            }
+        }
+      });
+    </script>
+  </body>
+</html>

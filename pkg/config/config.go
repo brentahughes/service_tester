@@ -10,6 +10,8 @@ import (
 type Config struct {
 	Port          int
 	Discovery     string
+	PublicIPDNS   string
+	InternalPDNS  string
 	CheckInterval time.Duration
 }
 
@@ -40,9 +42,14 @@ func LoadEnvConfig() (*Config, error) {
 		}
 	}
 
+	internalIP := "self.metadata.edgeengine.internal"
+	publicIP := "self.metadata.compute.edgeengine.io"
+
 	return &Config{
 		Port:          port,
 		Discovery:     discoveryURL,
 		CheckInterval: checkInterval,
+		InternalPDNS:  internalIP,
+		PublicIPDNS:   publicIP,
 	}, nil
 }
