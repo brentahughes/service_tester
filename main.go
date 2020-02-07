@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/config"
-	"github.com/brentahughes/service_tester/pkg/db"
 	"github.com/brentahughes/service_tester/pkg/servicecheck"
 	"github.com/brentahughes/service_tester/pkg/webserver"
 )
@@ -18,7 +18,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db := db.NewInMemoryStore()
+	db, err := storm.Open("service_test.db")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	checker := servicecheck.NewChecker(db, c.Discovery, c.CheckInterval)
 	go checker.Start()

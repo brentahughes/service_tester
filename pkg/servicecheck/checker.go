@@ -6,16 +6,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brentahughes/service_tester/pkg/db"
+	"github.com/asdine/storm/v3"
 )
 
 type Checker struct {
-	db            db.DB
+	db            *storm.DB
 	serviceName   string
 	checkInterval time.Duration
 }
 
-func NewChecker(db db.DB, serviceName string, checkInterval time.Duration) *Checker {
+func NewChecker(db *storm.DB, serviceName string, checkInterval time.Duration) *Checker {
 	return &Checker{
 		db:            db,
 		serviceName:   serviceName,

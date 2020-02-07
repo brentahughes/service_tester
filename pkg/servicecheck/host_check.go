@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -15,13 +16,14 @@ type checkHostResponse struct {
 	Addresses map[string]string `json:"addresses"`
 }
 
-func (c *Checker) checkHost(host string, port uint16) {
+func (c *Checker) checkHost(hostname string, port uint16) {
+
 	var public, internal string
 	internalStatus := db.StatusError
 	publicStatus := db.StatusError
 
 	timer := time.Now()
-	r, ok := c.checkEndpoint(host, port)
+	r, ok := c.checkEndpoint(hostname, port)
 	if ok {
 		internalStatus = db.StatusSuccess
 	}
@@ -37,6 +39,16 @@ func (c *Checker) checkHost(host string, port uint16) {
 
 		internal = r.Addresses["internal"]
 		public = r.Addresses["public"]
+	}
+
+	host := &db.Host{
+		Hostname:   hostname,
+		InternalIP: net.ParseIP(internal),
+		PublicIP:   net.ParseIP(public),
+	}
+	if err := host.Save(c.db); err != nil {
+		log.Println(err)
+		return
 	}
 
 	hostCheck := db.HostCheck{
