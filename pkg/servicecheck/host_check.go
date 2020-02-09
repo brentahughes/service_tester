@@ -5,103 +5,103 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"time"
 
-	"github.com/brentahughes/service_tester/pkg/db"
+	"github.com/asdine/storm/v3"
+	"github.com/brentahughes/service_tester/pkg/models"
 )
 
 type checkHostResponse struct {
-	Addresses map[string]string `json:"addresses"`
+	Addresses struct {
+		Public   string `json:"public"`
+		Internal string `json:"internal"`
+	} `json:"addresses"`
 }
 
-func (c *Checker) checkHost(hostname string, port uint16) {
+func (c *Checker) checkHost(checkType models.CheckType, hostname string, endpoint string) {
+	status := models.StatusSuccess
 
-	var public, internal string
-	internalStatus := db.StatusError
-	publicStatus := db.StatusError
-
-	timer := time.Now()
-	r, ok := c.checkEndpoint(hostname, port)
-	if ok {
-		internalStatus = db.StatusSuccess
-	}
-
-	responseTime := time.Since(timer)
-
-	if r != nil {
-		if publicIP, ok := r.Addresses["public"]; ok && publicIP != "" {
-			if _, ok := c.checkEndpoint(publicIP, port); ok {
-				publicStatus = db.StatusSuccess
-			}
-		}
-
-		internal = r.Addresses["internal"]
-		public = r.Addresses["public"]
-	}
-
-	host := &db.Host{
-		Hostname:   hostname,
-		InternalIP: net.ParseIP(internal),
-		PublicIP:   net.ParseIP(public),
-	}
-	if err := host.Save(c.db); err != nil {
+	host, err := models.GetHostByHostname(c.db, hostname)
+	if err != nil && err != storm.ErrNotFound {
 		log.Println(err)
 		return
 	}
 
-	hostCheck := db.HostCheck{
-		Name:       host,
-		InternalIP: internal,
-		PublicIP:   public,
-
-		Checks: []db.CheckData{
-			db.CheckData{
-				InternalStatus: internalStatus,
-				PublicStatus:   publicStatus,
-				ResponseTime:   responseTime,
-				ResponseTimeMS: responseTime.Milliseconds(),
-			},
-		},
+	if host == nil {
+		host = &models.Host{
+			Hostname: hostname,
+			Port:     c.servicePort,
+		}
 	}
-	if err := c.db.Create(hostCheck); err != nil {
-		log.Print(err)
+
+	resp, responseTime, err := c.checkEndpoint(endpoint)
+	if err != nil {
+		log.Println(err)
+		status = models.StatusError
+	}
+
+	check := &models.Check{
+		Status:       status,
+		CheckType:    checkType,
+		ResponseTime: responseTime,
+	}
+
+	if resp != nil {
+		if resp.Addresses.Public != "" {
+			host.PublicIP = resp.Addresses.Public
+		}
+		if resp.Addresses.Internal != "" {
+			host.InternalIP = resp.Addresses.Internal
+		}
+	}
+
+	switch checkType {
+	case models.CheckInternal:
+		host.InternalIP = endpoint
+	case models.CheckPublic:
+		host.PublicIP = endpoint
+	}
+
+	if err := host.AddCheck(c.db, check); err != nil {
+		log.Println("error adding check: ", err)
+		return
+	}
+
+	if err := host.Save(c.db); err != nil {
+		log.Println("error saving host: ", err)
 		return
 	}
 }
 
-func (c *Checker) checkEndpoint(host string, port uint16) (*checkHostResponse, bool) {
+func (c *Checker) checkEndpoint(host string) (*checkHostResponse, time.Duration, error) {
 	client := http.DefaultClient
-	client.Timeout = 10 * time.Second
+	client.Timeout = 1 * time.Second
 	defer client.CloseIdleConnections()
 
-	schema := "http"
-	if port == 443 {
-		schema = "https"
+	timer := time.Now()
+	resp, err := client.Get(fmt.Sprintf("http://%s:%d/check", host, c.servicePort))
+	responseTime := time.Since(timer)
+
+	if err != nil {
+		return nil, responseTime, err
 	}
 
-	resp, err := client.Get(fmt.Sprintf("%s://%s:%d/check", schema, host, port))
-	if err != nil {
-		log.Print(err)
-		return nil, false
-	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode > 399 {
-		return nil, false
+		return nil, responseTime, fmt.Errorf("error bad status response: %d", resp.StatusCode)
 	}
 
 	checkResp := checkHostResponse{}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Print(err)
-		return nil, false
+		return nil, responseTime, err
 	}
 
 	if err := json.Unmarshal(body, &checkResp); err != nil {
-		return nil, false
+		return nil, responseTime, err
 	}
 
-	return &checkResp, true
+	return &checkResp, responseTime, nil
 }

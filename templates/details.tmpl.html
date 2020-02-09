@@ -1,0 +1,134 @@
+{{ define "css" }}
+<link rel="stylesheet" type="text/css" href="/resources/css/details.css">
+{{ end }}
+
+{{ define "content" }}
+<h3>Details</h3>
+<h5>{{ .Host.Hostname }}</h5>
+<br/>
+
+<div class="row">
+  <div class="graph"><canvas id="responseTimes"></canvas></div>
+</div>
+
+<div class="row">&nbsp;
+</div>
+
+<div class="row">
+<div class="col-lg">
+  <h5>Internal Checks</h5>
+  <table class="table table-dark">
+    <tr>
+      <td>Time</td>
+      <td>Type</td>
+      <td>Result</td>
+      <td>Response Time</td>
+    </tr>
+    {{ range $check := .Host.Checks.Internal }}
+      <tr>
+        <td>{{ $check.CheckedAt.Format "2006-01-02 15:04:05" }} UTC</td>
+        <td>{{ $check.CheckType }}</td>
+        <td class={{ $check.Status }}>{{ $check.Status }}</td>
+        <td>{{ $check.ResponseTime.String }}</td>
+      </tr>
+    {{ end }}
+  </table>
+</div>
+
+<div class="col-lg">
+  <h5>Public Checks</h5>
+  <table class="table table-dark">
+    <tr>
+      <td>Time</td>
+      <td>Type</td>
+      <td>Result</td>
+      <td>Response Time</td>
+    </tr>
+    {{ range $check := .Host.Checks.Public }}
+      <tr>
+        <td>{{ $check.CheckedAt.Format "2006-01-02 15:04:05" }} UTC</td>
+        <td>{{ $check.CheckType }}</td>
+        <td class={{ $check.Status }}>{{ $check.Status }}</td>
+        <td>{{ $check.ResponseTime.String }}</td>
+      </tr>
+    {{ end }}
+  </table>
+</div>
+</div>
+
+
+<script src="/resources/js/moment.js"></script>
+<script src="/resources/js/chart.js"></script>
+<script>
+  var dataPublic = [
+    {{- range .Host.Checks.Public }}
+      {
+        t: moment.unix({{- .CheckedAt.Unix }}),
+        {{ if eq .Status "success" }}
+        y:{{- .ResponseTime.Milliseconds }}
+        {{ else }}
+        y: NaN
+        {{ end }}
+      },
+    {{- end }}
+  ];
+
+  var dataInternal = [
+    {{- range .Host.Checks.Internal }}
+      {
+        t: moment.unix({{- .CheckedAt.Unix }}),
+        {{ if eq .Status "success" }}
+        y:{{- .ResponseTime.Milliseconds }}
+        {{ else }}
+        y: NaN
+        {{ end }}
+      },
+    {{- end }}
+  ];
+
+  var ctx = document.getElementById('responseTimes');
+  var chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: "Public",
+            data: dataPublic,
+            borderColor: "#cc3e95",
+            borderWidth: 2,
+            backgroundColor: "rgba(255,99,132,0.05)"
+          },
+          {
+            label: "Internal",
+            data: dataInternal,
+            borderColor: "#3e95cd",
+            borderWidth: 2,
+            backgroundColor: "rgba(132,99,255,0.05)"
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        hoverMode: 'index',
+        legend: {
+            display: true
+        },
+        scales: {
+          xAxes: [{
+            type: 'time',
+            time: {
+              unit: 'second'
+            }
+          }],
+          yAxes: [{
+            display: true,
+            ticks: {
+                suggestedMin: 0,
+                beginAtZero: true
+            }
+        }]
+        }
+    }
+  });
+</script>
+{{ end }}

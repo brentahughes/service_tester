@@ -12,7 +12,7 @@ type checkResponse struct {
 	Addresses map[string]string `json:"addresses"`
 }
 
-func (s *Server) handleCheck(w http.ResponseWriter, req *http.Request) {
+func (s *Server) handleApiCheck(w http.ResponseWriter, req *http.Request) {
 	internal, public, err := s.getIPs()
 	if err != nil {
 		s.writeErr(w, 500, err)

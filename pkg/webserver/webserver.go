@@ -6,13 +6,14 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/config"
-	"github.com/brentahughes/service_tester/pkg/db"
+	"github.com/gorilla/mux"
 )
 
 type Server struct {
 	config config.Config
-	db     db.DB
+	db     *storm.DB
 	port   int
 }
 
@@ -21,7 +22,7 @@ type errResponse struct {
 	Message string `json:"message"`
 }
 
-func NewServer(config config.Config, db db.DB, port int) *Server {
+func NewServer(config config.Config, db *storm.DB, port int) *Server {
 	return &Server{
 		db:     db,
 		port:   port,
@@ -30,11 +31,25 @@ func NewServer(config config.Config, db db.DB, port int) *Server {
 }
 
 func (s *Server) Start() {
-	http.HandleFunc("/", s.handleIndex)
-	http.HandleFunc("/check", s.handleCheck)
-	http.HandleFunc("/details", s.handleDetails)
+	// Root resources and redirect
+	rootRouter := mux.NewRouter()
+	rootRouter.PathPrefix("/resources/").Handler(http.StripPrefix("/resources/", http.FileServer(http.Dir("resources"))))
+	rootRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/dashboard", http.StatusPermanentRedirect)
+	})
 
-	http.Handle("/resources/", http.StripPrefix("/resources/", http.FileServer(http.Dir("resources"))))
+	// Dashboard pages
+	dashboardRouter := rootRouter.PathPrefix("/dashboard").Subrouter()
+	dashboardRouter.HandleFunc("", s.handleDashboardOverview).Methods("GET")
+	dashboardRouter.HandleFunc("/", s.handleDashboardOverview).Methods("GET")
+	dashboardRouter.HandleFunc("/host/{id:[0-9]+}/details", s.handleDashboardHostDetails).Name("host").Methods("GET")
+
+	// Api endpoints
+	apiRouter := rootRouter.PathPrefix("/api").Subrouter()
+	apiRouter.HandleFunc("/check", s.handleApiCheck).Methods("GET")
+	apiRouter.HandleFunc("/host/{id:[0-9]+", s.handleApiHostDelete).Methods("DELETE")
+
+	http.Handle("/", rootRouter)
 
 	log.Printf("Listing on :%d", s.port)
 	http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)

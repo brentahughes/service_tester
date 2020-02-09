@@ -16,10 +16,9 @@ type Config struct {
 }
 
 func LoadEnvConfig() (*Config, error) {
-	portStr := os.Getenv("WEB_INTERFACE_PORT")
-
 	var err error
 
+	portStr := os.Getenv("WEB_INTERFACE_PORT")
 	port := 8080
 	if portStr != "" {
 		port, err = strconv.Atoi(portStr)

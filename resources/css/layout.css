@@ -1,0 +1,26 @@
+h1, h2, h3, h4, h5 {
+    color: #fff;
+}
+
+body {
+    margin: 0;
+    background-color: #454d54;
+}
+
+.main-container {
+    width: 90%;
+    margin-top: 20px;
+    margin-left: auto;
+    margin-right: auto;
+    background-color: #343a40;
+}
+
+.content-container {
+    padding: 10px;
+    background-color: #343a40;
+}
+
+.host-info {
+    color: #ccc;
+    font-size: 12px !important;
+}

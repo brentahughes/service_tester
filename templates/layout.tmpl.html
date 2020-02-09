@@ -1,0 +1,43 @@
+{{ define "layout" }}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Service Tester</title>
+
+    <link rel="stylesheet" type="text/css" href="/resources/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="/resources/css/layout.css">
+    {{ template "css" }}
+  </head>
+  <body>
+    <div class="main-container">
+        <nav class="navbar navbar-dark bg-dark">
+            <a class="navbar-brand" href="/">Service Tester</a>
+            <a class="navbar-nav nav-item nav-link" href="/">Home</a>
+        </nav>
+
+        <div class="content-container host-info">
+          <div class="row">
+            <div class="col-sm">
+              Hostname: {{ .CurrentHost.Hostname }}
+              <br/>
+              Host Uptime: {{ .CurrentHost.HostUptime.String }}
+              <br/>
+              Restarts: {{ .CurrentHost.ServiceRestarts }}
+            </div>
+            <div class="col-sm">
+              First Start: {{ .CurrentHost.ServiceFirstStart.Format "2006-01-02 15:04:05" }} UTC
+              <br/>
+              Last Start: {{ .CurrentHost.ServiceLastStart.Format "2006-01-02 15:04:05" }} UTC
+              <br/>
+              Service Uptime: {{ .CurrentHost.ServiceUptime.String }}
+            </div>
+            <div class="col-2">&nbsp;</div>
+          </div>
+        </div>
+        <br/>
+
+        <div class="content-container">{{ template "content" . }}</div>
+    </div>
+  </body>
+</html>
+{{ end }}

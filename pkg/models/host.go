@@ -1,19 +1,35 @@
 package models
 
 import (
-	"net"
 	"time"
 
-	"github.com/asdine/storm"
+	"github.com/asdine/storm/q"
+	"github.com/asdine/storm/v3"
 )
 
 type Host struct {
 	ID          int    `storm:"id,increment"`
 	Hostname    string `storm:"unique"`
-	InternalIP  net.IP `storm:"unique"`
-	PublicIP    net.IP `storm:"unique"`
+	InternalIP  string `storm:"unique"`
+	PublicIP    string `storm:"unique"`
+	Port        int
 	FirstSeenAt time.Time
 	LastSeenAt  time.Time
+
+	LatestChecks LatestChecks `json:"-"`
+	Checks       Checks       `json:"-"`
+}
+
+type LatestChecks struct {
+	Host     Check
+	Internal Check
+	Public   Check
+}
+
+type Checks struct {
+	Host     []Check
+	Internal []Check
+	Public   []Check
 }
 
 func GetHostByHostname(db *storm.DB, hostname string) (*Host, error) {
@@ -25,18 +41,47 @@ func GetHostByHostname(db *storm.DB, hostname string) (*Host, error) {
 	return &host, nil
 }
 
+func GetHostByID(db *storm.DB, id int) (*Host, error) {
+	var host Host
+	if err := db.One("ID", id, &host); err != nil {
+		return nil, err
+	}
+
+	h := &host
+	h.addChecks(db)
+
+	return h, nil
+}
+
+func GetAllHosts(db *storm.DB) ([]Host, error) {
+	var hosts []Host
+	if err := db.AllByIndex("Hostname", &hosts); err != nil {
+		return nil, err
+	}
+
+	for i, host := range hosts {
+		host.addLastChecks(db)
+		hosts[i] = host
+	}
+
+	return hosts, nil
+}
+
 func (h *Host) Save(db *storm.DB) error {
+	h.LastSeenAt = time.Now().UTC()
 	if h.FirstSeenAt.IsZero() {
 		h.FirstSeenAt = time.Now().UTC()
 	}
 
-	h.LastSeenAt = time.Now().UTC()
-
 	return db.Save(h)
 }
 
-func (h *Host) AddCheck(db *storm.DB, check *Check) error {
-	check.HostID = h.ID
-	check.CheckedAt = time.Now().UTC()
-	return db.Save(check)
+func (h *Host) Delete(db *storm.DB) error {
+	// Delete all the checks for the host
+	if err := db.Select(q.Eq("HostID", h.ID)).Delete(&Check{}); err != nil {
+		return err
+	}
+
+	// Delete the host
+	return db.DeleteStruct(h)
 }
