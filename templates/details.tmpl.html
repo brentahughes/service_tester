@@ -3,10 +3,6 @@
 {{ end }}
 
 {{ define "content" }}
-<h3>Details</h3>
-<h5>{{ .Host.Hostname }}</h5>
-<br/>
-
 <div class="row">
   <div class="graph"><canvas id="responseTimes"></canvas></div>
 </div>
@@ -17,7 +13,7 @@
 <div class="row">
 <div class="col-lg">
   <h5>Internal Checks</h5>
-  <table class="table table-dark">
+  <table class="table table-dark table-borderless table-sm table-striped">
     <tr>
       <td>Time</td>
       <td>Type</td>
@@ -37,7 +33,7 @@
 
 <div class="col-lg">
   <h5>Public Checks</h5>
-  <table class="table table-dark">
+  <table class="table table-dark table-borderless table-sm table-striped">
     <tr>
       <td>Time</td>
       <td>Type</td>
@@ -108,7 +104,14 @@
         ]
       },
       options: {
+        title: {
+          display: true,
+          fontSize: 24,
+          fontColor: "#fff",
+          text: "{{ .Host.Hostname }}"
+        },
         responsive: true,
+        maintainAspectRatio: false,
         hoverMode: 'index',
         legend: {
             display: true
@@ -117,7 +120,7 @@
           xAxes: [{
             type: 'time',
             time: {
-              unit: 'second'
+              unit: 'minute'
             }
           }],
           yAxes: [{

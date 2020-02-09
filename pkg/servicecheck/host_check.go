@@ -13,16 +13,17 @@ import (
 )
 
 type checkHostResponse struct {
+	Hostname  string `json:"hostname"`
 	Addresses struct {
 		Public   string `json:"public"`
 		Internal string `json:"internal"`
 	} `json:"addresses"`
 }
 
-func (c *Checker) checkHost(checkType models.CheckType, hostname string, endpoint string) {
+func (c *Checker) checkHost(checkType models.CheckType, endpoint string) {
 	status := models.StatusSuccess
 
-	host, err := models.GetHostByHostname(c.db, hostname)
+	host, err := models.GetHostByIP(c.db, endpoint)
 	if err != nil && err != storm.ErrNotFound {
 		log.Println(err)
 		return
@@ -30,8 +31,7 @@ func (c *Checker) checkHost(checkType models.CheckType, hostname string, endpoin
 
 	if host == nil {
 		host = &models.Host{
-			Hostname: hostname,
-			Port:     c.servicePort,
+			Port: c.servicePort,
 		}
 	}
 
@@ -39,6 +39,9 @@ func (c *Checker) checkHost(checkType models.CheckType, hostname string, endpoin
 	if err != nil {
 		log.Println(err)
 		status = models.StatusError
+	}
+	if resp == nil && host == nil {
+		return
 	}
 
 	check := &models.Check{
@@ -48,6 +51,8 @@ func (c *Checker) checkHost(checkType models.CheckType, hostname string, endpoin
 	}
 
 	if resp != nil {
+		host.Hostname = resp.Hostname
+
 		if resp.Addresses.Public != "" {
 			host.PublicIP = resp.Addresses.Public
 		}
@@ -69,7 +74,7 @@ func (c *Checker) checkHost(checkType models.CheckType, hostname string, endpoin
 	}
 
 	if err := host.Save(c.db); err != nil {
-		log.Println("error saving host: ", err)
+		log.Printf("error saving host (%s): %v", host.Hostname, err)
 		return
 	}
 }

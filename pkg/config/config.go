@@ -19,7 +19,7 @@ func LoadEnvConfig() (*Config, error) {
 	var err error
 
 	portStr := os.Getenv("WEB_INTERFACE_PORT")
-	port := 8080
+	port := 80
 	if portStr != "" {
 		port, err = strconv.Atoi(portStr)
 		if err != nil {

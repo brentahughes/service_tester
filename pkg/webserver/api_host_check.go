@@ -5,14 +5,23 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/brentahughes/service_tester/pkg/models"
 )
 
 type checkResponse struct {
 	Status    string            `json:"status"`
+	Hostname  string            `json:"hostname"`
 	Addresses map[string]string `json:"addresses"`
 }
 
 func (s *Server) handleApiCheck(w http.ResponseWriter, req *http.Request) {
+	currentHost, err := models.GetCurrentHost(s.db)
+	if err != nil {
+		s.writeErr(w, 500, err)
+		return
+	}
+
 	internal, public, err := s.getIPs()
 	if err != nil {
 		s.writeErr(w, 500, err)
@@ -20,7 +29,8 @@ func (s *Server) handleApiCheck(w http.ResponseWriter, req *http.Request) {
 	}
 
 	r := checkResponse{
-		Status: "success",
+		Status:   "success",
+		Hostname: currentHost.Hostname,
 		Addresses: map[string]string{
 			"internal": internal,
 			"public":   public,

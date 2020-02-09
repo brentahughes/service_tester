@@ -15,7 +15,6 @@ const (
 
 	CheckInternal CheckType = "internal"
 	CheckPublic   CheckType = "public"
-	CheckHostname CheckType = "hostname"
 )
 
 type CheckType string
@@ -60,10 +59,6 @@ func (h *Host) AddCheck(db *storm.DB, check *Check) error {
 func (h *Host) addChecks(db *storm.DB) {
 	var checks []Check
 
-	if err := h.getHostCheckTypeQuery(db, CheckHostname).Find(&checks); err == nil {
-		h.Checks.Host = checks
-	}
-
 	if err := h.getHostCheckTypeQuery(db, CheckInternal).Find(&checks); err == nil {
 		h.Checks.Internal = checks
 	}
@@ -75,10 +70,6 @@ func (h *Host) addChecks(db *storm.DB) {
 
 func (h *Host) addLastChecks(db *storm.DB) {
 	var check Check
-
-	if err := h.getHostCheckTypeQuery(db, CheckHostname).First(&check); err == nil {
-		h.LatestChecks.Host = check
-	}
 
 	if err := h.getHostCheckTypeQuery(db, CheckInternal).First(&check); err == nil {
 		h.LatestChecks.Internal = check

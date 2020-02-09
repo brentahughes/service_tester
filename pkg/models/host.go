@@ -21,13 +21,11 @@ type Host struct {
 }
 
 type LatestChecks struct {
-	Host     Check
 	Internal Check
 	Public   Check
 }
 
 type Checks struct {
-	Host     []Check
 	Internal []Check
 	Public   []Check
 }
@@ -53,9 +51,26 @@ func GetHostByID(db *storm.DB, id int) (*Host, error) {
 	return h, nil
 }
 
+func GetHostByIP(db *storm.DB, ip string) (*Host, error) {
+	var host Host
+	if err := db.Select(q.Or(q.Eq("InternalIP", ip), q.Eq("PublicIP", ip))).First(&host); err != nil {
+		return nil, err
+	}
+
+	h := &host
+	h.addChecks(db)
+
+	return h, nil
+}
+
 func GetAllHosts(db *storm.DB) ([]Host, error) {
+	currentHost, err := GetCurrentHost(db)
+	if err != nil {
+		return nil, err
+	}
+
 	var hosts []Host
-	if err := db.AllByIndex("Hostname", &hosts); err != nil {
+	if err := db.Select(q.Not(q.Eq("Hostname", currentHost.Hostname))).OrderBy("Hostname").Find(&hosts); err != nil {
 		return nil, err
 	}
 

@@ -15,26 +15,28 @@
             <a class="navbar-nav nav-item nav-link" href="/">Home</a>
         </nav>
 
-        <div class="content-container host-info">
+        <div class="container content-container host-info">
           <div class="row">
-            <div class="col-sm">
-              Hostname: {{ .CurrentHost.Hostname }}
-              <br/>
-              Host Uptime: {{ .CurrentHost.HostUptime.String }}
-              <br/>
-              Restarts: {{ .CurrentHost.ServiceRestarts }}
+            <div class="col-4 text-center">
+              <b>Hostname</b><br/>{{ .CurrentHost.Hostname }}<br/><br/>
             </div>
-            <div class="col-sm">
-              First Start: {{ .CurrentHost.ServiceFirstStart.Format "2006-01-02 15:04:05" }} UTC
-              <br/>
-              Last Start: {{ .CurrentHost.ServiceLastStart.Format "2006-01-02 15:04:05" }} UTC
-              <br/>
-              Service Uptime: {{ .CurrentHost.ServiceUptime.String }}
+            <div class="col-4 text-center">
+              <b>Service Restarts</b><br/>{{ .CurrentHost.ServiceRestarts }}<br/><br/>
             </div>
-            <div class="col-2">&nbsp;</div>
+            <div class="col-4 text-center">
+              <b>First Start</b><br/>{{ .CurrentHost.ServiceFirstStart.Format "2006-01-02 15:04:05" }} UTC<br/><br/>
+            </div>
+            <div class="col-4 text-center">
+              <b>Host Uptime</b><br/>{{ .CurrentHost.HostUptime.String }}<br/><br/>
+            </div>
+            <div class="col-4 text-center">
+              <b>Service Uptime</b><br/>{{ .CurrentHost.ServiceUptime.String }}<br/><br/>
+            </div>
+            <div class="col-4 text-center">
+              <b>Last Start</b><br/>{{ .CurrentHost.ServiceLastStart.Format "2006-01-02 15:04:05" }} UTC<br/><br/>
+            </div>
           </div>
         </div>
-        <br/>
 
         <div class="content-container">{{ template "content" . }}</div>
     </div>

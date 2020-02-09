@@ -1,7 +1,6 @@
 package servicecheck
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -12,10 +11,11 @@ import (
 )
 
 type Checker struct {
-	db            *storm.DB
-	servicePort   int
-	serviceName   string
-	checkInterval time.Duration
+	db              *storm.DB
+	servicePort     int
+	serviceName     string
+	checkInterval   time.Duration
+	currentHostname string
 }
 
 func NewChecker(db *storm.DB, serviceName string, servicePort int, checkInterval time.Duration) *Checker {
@@ -31,6 +31,12 @@ func (c *Checker) Start() {
 	if err := c.runCheck(); err != nil {
 		log.Fatal("error on first check run: ", err)
 	}
+
+	currentHost, err := models.GetCurrentHost(c.db)
+	if err != nil {
+		log.Fatal("error getting host info: ", err)
+	}
+	c.currentHostname = currentHost.Hostname
 
 	tick := time.NewTicker(c.checkInterval)
 	for range tick.C {
@@ -49,9 +55,14 @@ func (c *Checker) runCheck() error {
 		return err
 	}
 
-	for _, hostname := range hostnames {
-		if _, err := models.GetHostByHostname(c.db, hostname); err != nil && err == storm.ErrNotFound {
-			c.checkHost(models.CheckHostname, hostname, hostname)
+	for _, host := range hostnames {
+		checkType := models.CheckPublic
+		if strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.") || strings.HasPrefix(host, "172.") {
+			checkType = models.CheckInternal
+		}
+
+		if _, err := models.GetHostByIP(c.db, host); err != nil {
+			c.checkHost(checkType, host)
 		}
 	}
 
@@ -61,14 +72,16 @@ func (c *Checker) runCheck() error {
 	}
 
 	for _, host := range hosts {
-		c.checkHost(models.CheckHostname, host.Hostname, host.Hostname)
+		if host.Hostname == c.currentHostname {
+			continue
+		}
 
 		if host.InternalIP != "" {
-			c.checkHost(models.CheckInternal, host.Hostname, host.InternalIP)
+			c.checkHost(models.CheckInternal, host.InternalIP)
 		}
 
 		if host.PublicIP != "" {
-			c.checkHost(models.CheckPublic, host.Hostname, host.PublicIP)
+			c.checkHost(models.CheckPublic, host.PublicIP)
 		}
 	}
 
@@ -76,19 +89,14 @@ func (c *Checker) runCheck() error {
 }
 
 func (c *Checker) getHostnamesFromSRV() ([]string, error) {
-	parts := strings.SplitN(c.serviceName, ".", 3)
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("%s is not a valid srv", c.serviceName)
-	}
-
-	_, addrs, err := net.LookupSRV(strings.TrimPrefix(parts[0], "_"), strings.TrimPrefix(parts[1], "_"), parts[2])
+	addrs, err := net.LookupIP(c.serviceName)
 	if err != nil {
 		return nil, err
 	}
 
 	var hosts []string
 	for _, addr := range addrs {
-		hosts = append(hosts, strings.TrimSuffix(addr.Target, "."))
+		hosts = append(hosts, addr.String())
 	}
 	return hosts, nil
 }
