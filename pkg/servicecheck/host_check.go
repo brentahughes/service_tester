@@ -80,7 +80,7 @@ func (c *Checker) checkEndpoint(host string) (*checkHostResponse, time.Duration,
 	defer client.CloseIdleConnections()
 
 	timer := time.Now()
-	resp, err := client.Get(fmt.Sprintf("http://%s:%d/check", host, c.servicePort))
+	resp, err := client.Get(fmt.Sprintf("http://%s:%d/api/check", host, c.servicePort))
 	responseTime := time.Since(timer)
 
 	if err != nil {
