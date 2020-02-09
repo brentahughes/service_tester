@@ -4,14 +4,6 @@
     width: 50%;
 }
 
-.error {
-    color: #ff7777;
-}
-
-.success {
-    color: #77ff77;
-}
-
 .graph {
     position: relative;
     height: 400px;

@@ -1,8 +1,33 @@
 {{ define "css" }}
-<link rel="stylesheet" type="text/css" href="/resources/css/overview.css">
 {{ end }}
 
 {{ define "content" }}
+<div class="text-center"><h4>Current Host</h4></div>
+<div class="container text-white-50">
+  <div class="row">
+    <div class="col-sm-4 text-center">
+      <b>Hostname</b><br/>{{ .CurrentHost.Hostname }}<br/><br/>
+    </div>
+    <div class="col-sm-4 text-center">
+      <b>Service Restarts</b><br/>{{ .CurrentHost.ServiceRestarts }}<br/><br/>
+    </div>
+    <div class="col-sm-4 text-center">
+      <b>First Start</b><br/>{{ .CurrentHost.ServiceFirstStart.Format "2006-01-02 15:04:05" }} UTC<br/><br/>
+    </div>
+    <div class="col-sm-4 text-center">
+      <b>Host Uptime</b><br/>{{ .CurrentHost.HostUptime.String }}<br/><br/>
+    </div>
+    <div class="col-sm-4 text-center">
+      <b>Service Uptime</b><br/>{{ .CurrentHost.ServiceUptime.String }}<br/><br/>
+    </div>
+    <div class="col-sm-4 text-center">
+      <b>Last Start</b><br/>{{ .CurrentHost.ServiceLastStart.Format "2006-01-02 15:04:05" }} UTC<br/><br/>
+    </div>
+  </div>
+</div>
+<br/><br/>
+
+<div class="text-center"><h4>Discovered Hosts</h4></div>
 <table class="table table-dark table-borderless">
   <thead>
     <tr>
@@ -11,18 +36,38 @@
       <th scope="col">Internal IP</th>
       <th scope="col">First Seen</th>
       <th scope="col">Last Seen</th>
-      <th scope="col">Details</th>
+      <th scope="col">&nbsp;</th>
     </tr>
   </thead>
   <tbody>
   {{ range .Hosts }}
     <tr>
-      <td><a href="http://{{ .PublicIP }}:{{ .Port }}">{{ .Hostname }}</a></td>
-      <td class="{{ .LatestChecks.Public.Status }}">{{ .PublicIP }}</td class="{{ .LatestChecks.Public.Status }}">
-      <td class="{{ .LatestChecks.Internal.Status }}">{{ .InternalIP }}</td>
+      <td><a class="text-white" href="http://{{ .PublicIP }}:{{ .Port }}">{{ .Hostname }}</a></td>
+      <td class="{{ .LatestChecks.Public.Status }}">
+        {{ .PublicIP }}
+
+        {{ if .LatestChecks.Public.StatusCode }}
+        {{ if gt .LatestChecks.Public.StatusCode 399 }}
+        <span class="badge badge-pill badge-danger">{{ .LatestChecks.Public.StatusCode }}</span>
+        {{ else }}
+        <span class="badge badge-pill badge-success">{{ .LatestChecks.Public.StatusCode }}</span>
+        {{ end }}
+        {{ end }}
+      </td>
+      <td class="{{ .LatestChecks.Internal.Status }}">
+        {{ .InternalIP }}
+
+        {{ if .LatestChecks.Internal.StatusCode }}
+        {{ if gt .LatestChecks.Internal.StatusCode 399 }}
+        <span class="badge badge-pill badge-danger">{{ .LatestChecks.Internal.StatusCode }}</span>
+        {{ else }}
+        <span class="badge badge-pill badge-success">{{ .LatestChecks.Internal.StatusCode }}</span>
+        {{ end }}
+        {{ end }}
+      </td>
       <td>{{ .FirstSeenAt.Format "2006-01-02 15:04:05" }} UTC</td>
       <td>{{ .LastSeenAt.Format "2006-01-02 15:04:05"}} UTC</td>
-      <td><a href="/dashboard/host/{{ .ID }}/details">view</a></td>
+      <td><a href="/dashboard/host/{{ .ID }}/details">details</a></td>
     </tr>
   {{ end }}
   </tbody>

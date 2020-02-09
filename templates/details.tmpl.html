@@ -24,7 +24,17 @@
       <tr>
         <td>{{ $check.CheckedAt.Format "2006-01-02 15:04:05" }} UTC</td>
         <td>{{ $check.CheckType }}</td>
-        <td class={{ $check.Status }}>{{ $check.Status }}</td>
+        <td class={{ $check.Status }}>
+          {{ $check.Status }}
+
+          {{ if $check.StatusCode }}
+          {{ if gt $check.StatusCode 399 }}
+          <span class="badge badge-pill badge-danger">{{ $check.StatusCode }}</span>
+          {{ else }}
+          <span class="badge badge-pill badge-success">{{ $check.StatusCode }}</span>
+          {{ end }}
+          {{ end }}
+        </td>
         <td>{{ $check.ResponseTime.String }}</td>
       </tr>
     {{ end }}
@@ -44,7 +54,17 @@
       <tr>
         <td>{{ $check.CheckedAt.Format "2006-01-02 15:04:05" }} UTC</td>
         <td>{{ $check.CheckType }}</td>
-        <td class={{ $check.Status }}>{{ $check.Status }}</td>
+        <td class={{ $check.Status }}>
+          {{ $check.Status }}
+
+          {{ if $check.StatusCode }}
+          {{ if gt $check.StatusCode 399 }}
+          <span class="badge badge-pill badge-danger">{{ $check.StatusCode }}</span>
+          {{ else }}
+          <span class="badge badge-pill badge-success">{{ $check.StatusCode }}</span>
+          {{ end }}
+          {{ end }}
+        </td>
         <td>{{ $check.ResponseTime.String }}</td>
       </tr>
     {{ end }}

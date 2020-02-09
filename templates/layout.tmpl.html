@@ -9,37 +9,37 @@
     {{ template "css" }}
   </head>
   <body>
-    <div class="main-container">
-        <nav class="navbar navbar-dark bg-dark">
-            <a class="navbar-brand" href="/">Service Tester</a>
-            <a class="navbar-nav nav-item nav-link" href="/">Home</a>
-        </nav>
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark">
+      <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
 
-        <div class="container content-container host-info">
-          <div class="row">
-            <div class="col-4 text-center">
-              <b>Hostname</b><br/>{{ .CurrentHost.Hostname }}<br/><br/>
+      <div class="collapse navbar-collapse" id="navbarSupportedContent">
+        <ul class="navbar-nav mr-auto">
+          <li class="nav-item active dropdown">
+            <a class="nav-link dropdown-toggle" href="/" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              {{ .CurrentHost.Hostname }}
+            </a>
+            <div class="dropdown-menu bg-dark" aria-labelledby="navbarDropdown">
+              {{ range .PublicHosts }}
+              <a class="dropdown-item text-white-50" href="http://{{ .PublicIP }}:{{ .Port }}">{{ .Hostname }}</a>
+              {{ end }}
             </div>
-            <div class="col-4 text-center">
-              <b>Service Restarts</b><br/>{{ .CurrentHost.ServiceRestarts }}<br/><br/>
-            </div>
-            <div class="col-4 text-center">
-              <b>First Start</b><br/>{{ .CurrentHost.ServiceFirstStart.Format "2006-01-02 15:04:05" }} UTC<br/><br/>
-            </div>
-            <div class="col-4 text-center">
-              <b>Host Uptime</b><br/>{{ .CurrentHost.HostUptime.String }}<br/><br/>
-            </div>
-            <div class="col-4 text-center">
-              <b>Service Uptime</b><br/>{{ .CurrentHost.ServiceUptime.String }}<br/><br/>
-            </div>
-            <div class="col-4 text-center">
-              <b>Last Start</b><br/>{{ .CurrentHost.ServiceLastStart.Format "2006-01-02 15:04:05" }} UTC<br/><br/>
-            </div>
-          </div>
-        </div>
+          </li>
 
+          <li class="nav-item">
+            <a class="nav-link" href="/">Home</a>
+          </li>
+        </ul>
+      </div>
+  </nav>
+
+    <div class="container-xl main-container">
         <div class="content-container">{{ template "content" . }}</div>
     </div>
+
+    <script src="/resources/js/jquery-3.4.1.min.js"></script>
+    <script src="/resources/js/bootstrap.min.js"></script>
   </body>
 </html>
 {{ end }}

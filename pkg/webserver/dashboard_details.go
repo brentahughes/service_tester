@@ -10,13 +10,19 @@ import (
 )
 
 type details struct {
+	PublicHosts []models.Host
 	CurrentHost models.CurrentHost
-	View        string
 	Host        models.Host
 }
 
 func (s *Server) handleDashboardHostDetails(w http.ResponseWriter, req *http.Request) {
 	currentHost, err := models.GetCurrentHost(s.db)
+	if err != nil {
+		s.writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	publicHosts, err := models.GetHostsWithPublicIPs(s.db)
 	if err != nil {
 		s.writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -42,7 +48,13 @@ func (s *Server) handleDashboardHostDetails(w http.ResponseWriter, req *http.Req
 		return
 	}
 
-	if err := t.ExecuteTemplate(w, "layout", details{View: "details", CurrentHost: *currentHost, Host: *host}); err != nil {
+	d := details{
+		CurrentHost: *currentHost,
+		PublicHosts: publicHosts,
+		Host:        *host,
+	}
+
+	if err := t.ExecuteTemplate(w, "layout", d); err != nil {
 		s.writeErr(w, http.StatusInternalServerError, err)
 		return
 	}

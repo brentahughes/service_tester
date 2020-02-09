@@ -82,6 +82,24 @@ func GetAllHosts(db *storm.DB) ([]Host, error) {
 	return hosts, nil
 }
 
+func GetHostsWithPublicIPs(db *storm.DB) ([]Host, error) {
+	currentHost, err := GetCurrentHost(db)
+	if err != nil {
+		return nil, err
+	}
+
+	var hosts []Host
+	if err := db.Select(
+		q.Not(
+			q.Eq("PublicIP", ""),
+			q.Eq("Hostname", currentHost.Hostname),
+		),
+	).OrderBy("Hostname").Find(&hosts); err != nil {
+		return nil, err
+	}
+	return hosts, nil
+}
+
 func (h *Host) Save(db *storm.DB) error {
 	h.LastSeenAt = time.Now().UTC()
 	if h.FirstSeenAt.IsZero() {

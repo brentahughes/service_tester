@@ -8,13 +8,19 @@ import (
 )
 
 type overview struct {
+	PublicHosts []models.Host
 	CurrentHost models.CurrentHost
-	View        string
 	Hosts       []models.Host
 }
 
 func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Request) {
 	currentHost, err := models.GetCurrentHost(s.db)
+	if err != nil {
+		s.writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	publicHosts, err := models.GetHostsWithPublicIPs(s.db)
 	if err != nil {
 		s.writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -32,7 +38,12 @@ func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	if err := t.ExecuteTemplate(w, "layout", overview{CurrentHost: *currentHost, Hosts: hosts}); err != nil {
+	o := overview{
+		PublicHosts: publicHosts,
+		CurrentHost: *currentHost,
+		Hosts:       hosts,
+	}
+	if err := t.ExecuteTemplate(w, "layout", o); err != nil {
 		s.writeErr(w, http.StatusInternalServerError, err)
 		return
 	}

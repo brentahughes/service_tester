@@ -25,6 +25,8 @@ type Check struct {
 	HostID       int    `storm:"index"`
 	Status       Status `storm:"index"`
 	ResponseTime time.Duration
+	StatusCode   int
+	ResponseBody []byte
 	CheckType    CheckType `storm:"index"`
 	CheckedAt    time.Time `storm:"index"`
 }
