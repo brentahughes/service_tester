@@ -1,7 +1,7 @@
 package servicecheck
 
 import (
-	"log"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -16,59 +16,61 @@ type Checker struct {
 	serviceName     string
 	checkInterval   time.Duration
 	currentHostname string
+	logger          *models.Logger
 }
 
-func NewChecker(db *storm.DB, serviceName string, servicePort int, checkInterval time.Duration) *Checker {
+func NewChecker(db *storm.DB, serviceName string, servicePort int, logger *models.Logger, checkInterval time.Duration) *Checker {
 	return &Checker{
 		db:            db,
 		servicePort:   servicePort,
 		serviceName:   serviceName,
 		checkInterval: checkInterval,
+		logger:        logger,
 	}
 }
 
 func (c *Checker) Start() {
 	if err := c.runCheck(); err != nil {
-		log.Fatal("error on first check run: ", err)
+		c.logger.Errorf("error on first check run: %v", err)
 	}
-
-	currentHost, err := models.GetCurrentHost(c.db)
-	if err != nil {
-		log.Fatal("error getting host info: ", err)
-	}
-	c.currentHostname = currentHost.Hostname
 
 	tick := time.NewTicker(c.checkInterval)
 	for range tick.C {
 		if err := c.runCheck(); err != nil {
-			log.Println(err)
+			c.logger.Errorf("%v", err)
 			return
 		}
 	}
 }
 
-func (c *Checker) Stop() {}
+func (c *Checker) Stop() {
+	c.logger.Infof("Shutting down checker")
+}
 
 func (c *Checker) runCheck() error {
-	hostnames, err := c.getHostnamesFromSRV()
+	ips, err := c.getHostnamesFromSRV()
 	if err != nil {
 		return err
 	}
 
-	for _, host := range hostnames {
+	for _, ip := range ips {
 		checkType := models.CheckPublic
-		if strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.") || strings.HasPrefix(host, "172.") {
+		if strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "192.") || strings.HasPrefix(ip, "172.") {
 			checkType = models.CheckInternal
 		}
 
-		if _, err := models.GetHostByIP(c.db, host); err != nil {
-			c.checkHost(checkType, host)
+		if host, err := models.GetHostByIP(c.db, ip); err != nil {
+			// Run the first check if this host does not already exist
+			c.checkHost(checkType, ip)
+		} else {
+			// If the host is available then update it's last seen
+			host.Save(c.db)
 		}
 	}
 
-	hosts, err := models.GetAllHosts(c.db)
+	hosts, err := models.GetRecentHostsWithChecks(c.db)
 	if err != nil {
-		return err
+		return fmt.Errorf("error getting recent hosts: %v", err)
 	}
 
 	for _, host := range hosts {

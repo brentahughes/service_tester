@@ -29,7 +29,11 @@
 
           {{ if $check.StatusCode }}
           {{ if gt $check.StatusCode 399 }}
-          <span class="badge badge-pill badge-danger">{{ $check.StatusCode }}</span>
+          <span
+            class="badge badge-pill badge-danger"
+            data-toggle="tooltip"
+            title="{{ $check.CheckErrorMessage }}"
+          >{{ $check.StatusCode }}</span>
           {{ else }}
           <span class="badge badge-pill badge-success">{{ $check.StatusCode }}</span>
           {{ end }}
@@ -59,7 +63,11 @@
 
           {{ if $check.StatusCode }}
           {{ if gt $check.StatusCode 399 }}
-          <span class="badge badge-pill badge-danger">{{ $check.StatusCode }}</span>
+          <span
+            class="badge badge-pill badge-danger"
+            data-toggle="tooltip"
+            title="{{ $check.CheckErrorMessage }}"
+          >{{ $check.StatusCode }}</span>
           {{ else }}
           <span class="badge badge-pill badge-success">{{ $check.StatusCode }}</span>
           {{ end }}

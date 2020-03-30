@@ -3,17 +3,18 @@ package webserver
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/config"
+	"github.com/brentahughes/service_tester/pkg/models"
 	"github.com/gorilla/mux"
 )
 
 type Server struct {
 	config config.Config
 	db     *storm.DB
+	logger *models.Logger
 	port   int
 }
 
@@ -22,11 +23,12 @@ type errResponse struct {
 	Message string `json:"message"`
 }
 
-func NewServer(config config.Config, db *storm.DB, port int) *Server {
+func NewServer(config config.Config, db *storm.DB, logger *models.Logger, port int) *Server {
 	return &Server{
 		db:     db,
 		port:   port,
 		config: config,
+		logger: logger,
 	}
 }
 
@@ -46,16 +48,18 @@ func (s *Server) Start() {
 
 	// Api endpoints
 	apiRouter := rootRouter.PathPrefix("/api").Subrouter()
-	apiRouter.HandleFunc("/check", s.handleApiCheck).Methods("GET")
+	apiRouter.HandleFunc("/health", s.handleApiHealth).Methods("GET")
 	apiRouter.HandleFunc("/host/{id:[0-9]+", s.handleApiHostDelete).Methods("DELETE")
 
 	http.Handle("/", rootRouter)
 
-	log.Printf("Listing on :%d", s.port)
+	s.logger.Infof("Listing on :%d", s.port)
 	http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
 }
 
-func (s *Server) Stop() {}
+func (s *Server) Stop() {
+	s.logger.Infof("Stopping webserver")
+}
 
 func (s *Server) writeErr(w http.ResponseWriter, code int, err error) {
 	w.WriteHeader(code)

@@ -8,13 +8,20 @@ import (
 )
 
 type Host struct {
-	ID          int    `storm:"id,increment"`
-	Hostname    string `storm:"unique"`
-	InternalIP  string `storm:"unique"`
-	PublicIP    string `storm:"unique"`
-	Port        int
-	FirstSeenAt time.Time
-	LastSeenAt  time.Time
+	ID                int       `storm:"id,increment"`
+	CurrentHost       bool      `storm:"index"`
+	Hostname          string    `storm:"unique"`
+	ServiceRestarts   int       `json:"serviceRestarts"`
+	ServiceFirstStart time.Time `json:"serviceFirstStart"`
+	ServiceLastStart  time.Time `json:"serviceLastStart"`
+	InternalIP        string    `storm:"unique"`
+	PublicIP          string    `storm:"unique"`
+	Port              int
+	ServiceUptime     time.Duration `json:"serviceUptime"`
+	HostUptime        time.Duration `json:"hostUptime"`
+	DiscoveredHosts   []string      `json:"discoveredHosts"`
+	FirstSeenAt       time.Time
+	LastSeenAt        time.Time `json:"index"`
 
 	LatestChecks LatestChecks `json:"-"`
 	Checks       Checks       `json:"-"`
@@ -63,14 +70,12 @@ func GetHostByIP(db *storm.DB, ip string) (*Host, error) {
 	return h, nil
 }
 
-func GetAllHosts(db *storm.DB) ([]Host, error) {
-	currentHost, err := GetCurrentHost(db)
-	if err != nil {
-		return nil, err
-	}
-
+func GetRecentHostsWithChecks(db *storm.DB) ([]Host, error) {
 	var hosts []Host
-	if err := db.Select(q.Not(q.Eq("Hostname", currentHost.Hostname))).OrderBy("Hostname").Find(&hosts); err != nil {
+	if err := db.Select(
+		q.Eq("CurrentHost", false),
+		q.Gte("LastSeenAt", time.Now().UTC().Add(-1*time.Minute)),
+	).OrderBy("Hostname").Find(&hosts); err != nil && err != storm.ErrNotFound {
 		return nil, err
 	}
 
@@ -80,6 +85,22 @@ func GetAllHosts(db *storm.DB) ([]Host, error) {
 	}
 
 	return hosts, nil
+}
+
+func GetRecentHosts(db *storm.DB) ([]Host, error) {
+	var hosts []Host
+	if err := db.AllByIndex("Hostname", &hosts); err != nil {
+		return nil, err
+	}
+
+	var recents []Host
+	for _, host := range hosts {
+		if time.Since(host.LastSeenAt) <= time.Minute {
+			recents = append(recents, host)
+		}
+	}
+
+	return recents, nil
 }
 
 func GetHostsWithPublicIPs(db *storm.DB) ([]Host, error) {

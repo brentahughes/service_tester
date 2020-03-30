@@ -6,6 +6,7 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/asdine/storm v2.1.2+incompatible
 	github.com/asdine/storm/v3 v3.1.0
+	github.com/davecgh/go-spew v1.1.1
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/shirou/gopsutil v2.20.1+incompatible

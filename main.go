@@ -25,19 +25,22 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := models.UpdateCurrentHost(db); err != nil {
+	logger := models.NewLogger(db)
+
+	if err := models.UpdateCurrentHost(db, c); err != nil {
 		log.Fatal(err)
 	}
 
-	checker := servicecheck.NewChecker(db, c.Discovery, c.Port, c.CheckInterval)
+	checker := servicecheck.NewChecker(db, c.Discovery, c.Port, logger, c.CheckInterval)
 	go checker.Start()
 	defer checker.Stop()
 
-	server := webserver.NewServer(*c, db, c.Port)
+	server := webserver.NewServer(*c, db, logger, c.Port)
 	go server.Start()
 	defer server.Stop()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
+	logger.Infof("Shutdown signal received")
 }

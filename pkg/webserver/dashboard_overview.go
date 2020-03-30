@@ -9,8 +9,9 @@ import (
 
 type overview struct {
 	PublicHosts []models.Host
-	CurrentHost models.CurrentHost
+	CurrentHost models.Host
 	Hosts       []models.Host
+	Logs        []models.Log
 }
 
 func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Request) {
@@ -26,7 +27,7 @@ func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	hosts, err := models.GetAllHosts(s.db)
+	hosts, err := models.GetRecentHostsWithChecks(s.db)
 	if err != nil {
 		s.writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -38,10 +39,17 @@ func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Reques
 		return
 	}
 
+	logs, err := models.GetLogs(s.db, 150)
+	if err != nil {
+		s.writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	o := overview{
 		PublicHosts: publicHosts,
 		CurrentHost: *currentHost,
 		Hosts:       hosts,
+		Logs:        logs,
 	}
 	if err := t.ExecuteTemplate(w, "layout", o); err != nil {
 		s.writeErr(w, http.StatusInternalServerError, err)

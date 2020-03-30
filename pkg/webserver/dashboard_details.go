@@ -11,7 +11,7 @@ import (
 
 type details struct {
 	PublicHosts []models.Host
-	CurrentHost models.CurrentHost
+	CurrentHost models.Host
 	Host        models.Host
 }
 

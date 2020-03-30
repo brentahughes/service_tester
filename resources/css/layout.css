@@ -20,3 +20,8 @@ body {
 .success {
     color: #77ff77;
 }
+
+.dropdown-item:hover {
+    background-color: #242a30;
+    color: #fff;
+}

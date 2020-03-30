@@ -21,14 +21,15 @@ type CheckType string
 type Status string
 
 type Check struct {
-	ID           int    `storm:"id,increment"`
-	HostID       int    `storm:"index"`
-	Status       Status `storm:"index"`
-	ResponseTime time.Duration
-	StatusCode   int
-	ResponseBody []byte
-	CheckType    CheckType `storm:"index"`
-	CheckedAt    time.Time `storm:"index"`
+	ID                int    `storm:"id,increment"`
+	HostID            int    `storm:"index"`
+	Status            Status `storm:"index"`
+	ResponseTime      time.Duration
+	StatusCode        int
+	ResponseBody      string
+	CheckErrorMessage string
+	CheckType         CheckType `storm:"index"`
+	CheckedAt         time.Time `storm:"index"`
 }
 
 func (h *Host) AddCheck(db *storm.DB, check *Check) error {

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"time"
 
@@ -13,14 +12,10 @@ import (
 )
 
 type checkHostResponse struct {
-	Hostname  string `json:"hostname"`
-	Addresses struct {
-		Public   string `json:"public"`
-		Internal string `json:"internal"`
-	} `json:"addresses"`
+	models.Host
 
 	statusCode   int
-	responseBody []byte
+	responseBody string
 	responseTime time.Duration
 	errorMessage error
 }
@@ -28,7 +23,7 @@ type checkHostResponse struct {
 func (c *Checker) checkHost(checkType models.CheckType, endpoint string) {
 	host, err := models.GetHostByIP(c.db, endpoint)
 	if err != nil && err != storm.ErrNotFound {
-		log.Println(err)
+		c.logger.Errorf("error checking for existing host on ip %s: %v", endpoint, err)
 		return
 	}
 
@@ -44,8 +39,14 @@ func (c *Checker) checkHost(checkType models.CheckType, endpoint string) {
 			host.PublicIP = endpoint
 		}
 	}
+	if host.CurrentHost {
+		return
+	}
 
 	resp := c.checkEndpoint(endpoint)
+	if host.ID == 0 && resp.errorMessage != nil {
+		return
+	}
 
 	check := &models.Check{
 		CheckType:    checkType,
@@ -57,24 +58,30 @@ func (c *Checker) checkHost(checkType models.CheckType, endpoint string) {
 
 	if resp.errorMessage != nil {
 		check.Status = models.StatusError
+		check.CheckErrorMessage = resp.errorMessage.Error()
 	} else {
+		existingHost, _ := models.GetHostByHostname(c.db, resp.Hostname)
+		if existingHost != nil {
+			host = existingHost
+		}
+
 		host.Hostname = resp.Hostname
 
-		if resp.Addresses.Public != "" {
-			host.PublicIP = resp.Addresses.Public
+		if resp.PublicIP != "" {
+			host.PublicIP = resp.PublicIP
 		}
-		if resp.Addresses.Internal != "" {
-			host.InternalIP = resp.Addresses.Internal
+		if resp.InternalIP != "" {
+			host.InternalIP = resp.InternalIP
 		}
 	}
 
 	if err := host.Save(c.db); err != nil {
-		log.Printf("error saving host (%s): %v", host.Hostname, err)
+		c.logger.Errorf("error saving host (%s): %v", host.Hostname, err)
 		return
 	}
 
 	if err := host.AddCheck(c.db, check); err != nil {
-		log.Println("error adding check: ", err)
+		c.logger.Errorf("error adding check: ", err)
 		return
 	}
 }
@@ -85,12 +92,13 @@ func (c *Checker) checkEndpoint(host string) (checkResp checkHostResponse) {
 	defer client.CloseIdleConnections()
 
 	timer := time.Now()
-	resp, err := client.Get(fmt.Sprintf("http://%s:%d/api/check", host, c.servicePort))
+	resp, err := client.Get(fmt.Sprintf("http://%s:%d/api/health", host, c.servicePort))
 	checkResp.responseTime = time.Since(timer)
 
 	if err != nil {
 		checkResp.statusCode = 408
 		checkResp.errorMessage = err
+		c.logger.Errorf("error checking %s health: %v", host, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -98,17 +106,20 @@ func (c *Checker) checkEndpoint(host string) (checkResp checkHostResponse) {
 	checkResp.statusCode = resp.StatusCode
 	if resp.StatusCode > 399 {
 		checkResp.errorMessage = fmt.Errorf("error bad status response: %d", resp.StatusCode)
+		c.logger.Errorf("error bad status response: %d", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		checkResp.errorMessage = err
+		c.logger.Errorf("error reading body from %s health: %v", host, err)
 		return
 	}
-	checkResp.responseBody = body
+	checkResp.responseBody = string(body)
 
 	if err := json.Unmarshal(body, &checkResp); err != nil {
 		checkResp.errorMessage = err
+		c.logger.Errorf("error unmarshaling body into struct from %s health: %v", host, err)
 	}
 
 	return
