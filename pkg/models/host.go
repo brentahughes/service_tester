@@ -39,7 +39,7 @@ type Checks struct {
 
 func GetHostByHostname(db *storm.DB, hostname string) (*Host, error) {
 	var host Host
-	if err := db.One("Hostname", hostname, &host); err != nil {
+	if err := db.From("host").One("Hostname", hostname, &host); err != nil {
 		return nil, err
 	}
 
@@ -48,7 +48,7 @@ func GetHostByHostname(db *storm.DB, hostname string) (*Host, error) {
 
 func GetHostByID(db *storm.DB, id int) (*Host, error) {
 	var host Host
-	if err := db.One("ID", id, &host); err != nil {
+	if err := db.From("host").One("ID", id, &host); err != nil {
 		return nil, err
 	}
 
@@ -60,7 +60,7 @@ func GetHostByID(db *storm.DB, id int) (*Host, error) {
 
 func GetHostByIP(db *storm.DB, ip string) (*Host, error) {
 	var host Host
-	if err := db.Select(q.Or(q.Eq("InternalIP", ip), q.Eq("PublicIP", ip))).First(&host); err != nil {
+	if err := db.From("host").Select(q.Or(q.Eq("InternalIP", ip), q.Eq("PublicIP", ip))).First(&host); err != nil {
 		return nil, err
 	}
 
@@ -72,7 +72,7 @@ func GetHostByIP(db *storm.DB, ip string) (*Host, error) {
 
 func GetRecentHostsWithChecks(db *storm.DB) ([]Host, error) {
 	var hosts []Host
-	if err := db.Select(
+	if err := db.From("host").Select(
 		q.Eq("CurrentHost", false),
 		q.Gte("LastSeenAt", time.Now().UTC().Add(-1*time.Minute)),
 	).OrderBy("Hostname").Find(&hosts); err != nil && err != storm.ErrNotFound {
@@ -89,7 +89,7 @@ func GetRecentHostsWithChecks(db *storm.DB) ([]Host, error) {
 
 func GetRecentHosts(db *storm.DB) ([]Host, error) {
 	var hosts []Host
-	if err := db.AllByIndex("Hostname", &hosts); err != nil {
+	if err := db.From("host").AllByIndex("Hostname", &hosts); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +110,7 @@ func GetHostsWithPublicIPs(db *storm.DB) ([]Host, error) {
 	}
 
 	var hosts []Host
-	if err := db.Select(
+	if err := db.From("host").Select(
 		q.Not(
 			q.Eq("PublicIP", ""),
 			q.Eq("Hostname", currentHost.Hostname),
@@ -127,15 +127,15 @@ func (h *Host) Save(db *storm.DB) error {
 		h.FirstSeenAt = time.Now().UTC()
 	}
 
-	return db.Save(h)
+	return db.From("host").Save(h)
 }
 
 func (h *Host) Delete(db *storm.DB) error {
 	// Delete all the checks for the host
-	if err := db.Select(q.Eq("HostID", h.ID)).Delete(&Check{}); err != nil {
+	if err := db.From("host").Select(q.Eq("HostID", h.ID)).Delete(&Check{}); err != nil {
 		return err
 	}
 
 	// Delete the host
-	return db.DeleteStruct(h)
+	return db.From("host").DeleteStruct(h)
 }

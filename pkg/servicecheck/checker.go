@@ -8,6 +8,7 @@ import (
 
 	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/models"
+	"github.com/panjf2000/ants"
 )
 
 type Checker struct {
@@ -17,16 +18,30 @@ type Checker struct {
 	checkInterval   time.Duration
 	currentHostname string
 	logger          *models.Logger
+	pool            *ants.Pool
 }
 
-func NewChecker(db *storm.DB, serviceName string, servicePort int, logger *models.Logger, checkInterval time.Duration) *Checker {
+func NewChecker(
+	db *storm.DB,
+	serviceName string,
+	servicePort int,
+	logger *models.Logger,
+	checkInterval time.Duration,
+	parallelChecks int,
+) (*Checker, error) {
+	pool, err := ants.NewPool(parallelChecks)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Checker{
 		db:            db,
 		servicePort:   servicePort,
 		serviceName:   serviceName,
 		checkInterval: checkInterval,
 		logger:        logger,
-	}
+		pool:          pool,
+	}, nil
 }
 
 func (c *Checker) Start() {
@@ -68,7 +83,7 @@ func (c *Checker) runCheck() error {
 		}
 	}
 
-	hosts, err := models.GetRecentHostsWithChecks(c.db)
+	hosts, err := models.GetRecentHosts(c.db)
 	if err != nil {
 		return fmt.Errorf("error getting recent hosts: %v", err)
 	}

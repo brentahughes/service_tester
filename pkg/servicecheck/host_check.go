@@ -21,6 +21,10 @@ type checkHostResponse struct {
 }
 
 func (c *Checker) checkHost(checkType models.CheckType, endpoint string) {
+	c.pool.Submit(func() { c.runHostCheck(checkType, endpoint) })
+}
+
+func (c *Checker) runHostCheck(checkType models.CheckType, endpoint string) {
 	host, err := models.GetHostByIP(c.db, endpoint)
 	if err != nil && err != storm.ErrNotFound {
 		c.logger.Errorf("error checking for existing host on ip %s: %v", endpoint, err)

@@ -19,11 +19,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db, err := storm.Open("service_test.db")
+	db, err := storm.Open("service_test.db", storm.Batch())
 	if err != nil {
 		log.Fatal("error opening database: ", err)
 	}
 	defer db.Close()
+
+	if err := initDatabase(db); err != nil {
+		log.Fatal(err)
+	}
 
 	logger := models.NewLogger(db)
 
@@ -31,7 +35,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	checker := servicecheck.NewChecker(db, c.Discovery, c.Port, logger, c.CheckInterval)
+	checker, err := servicecheck.NewChecker(db, c.Discovery, c.Port, logger, c.CheckInterval, c.ParallelChecks)
+	if err != nil {
+		log.Fatal(err)
+	}
 	go checker.Start()
 	defer checker.Stop()
 
@@ -43,4 +50,24 @@ func main() {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
 	logger.Infof("Shutdown signal received")
+}
+
+func initDatabase(db *storm.DB) error {
+	dbModels := []interface{}{
+		&models.Check{},
+		&models.Host{},
+		&models.Log{},
+	}
+
+	for _, model := range dbModels {
+		if err := db.Init(model); err != nil {
+			return err
+		}
+
+		if err := db.ReIndex(model); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/asdine/storm/q"
@@ -32,21 +33,24 @@ type Check struct {
 	CheckedAt         time.Time `storm:"index"`
 }
 
+func (h *Host) getCheckDB(db *storm.DB) storm.Node {
+	return db.From(fmt.Sprintf("host.%d.check", h.ID))
+}
 func (h *Host) AddCheck(db *storm.DB, check *Check) error {
 	check.HostID = h.ID
 	check.CheckedAt = time.Now().UTC()
-	if err := db.Save(check); err != nil {
+	if err := h.getCheckDB(db).Save(check); err != nil {
 		return err
 	}
 
 	// Check If more than 100 checks exist and delete older ones
-	count, err := db.Select(q.Eq("HostID", h.ID), q.Eq("CheckType", check.CheckType)).Count(&Check{})
+	count, err := h.getCheckDB(db).Select(q.Eq("HostID", h.ID), q.Eq("CheckType", check.CheckType)).Count(&Check{})
 	if err != nil {
 		return err
 	}
 
 	if count > checkLimit {
-		query := db.Select(
+		query := h.getCheckDB(db).Select(
 			q.Eq("HostID", h.ID),
 			q.Eq("CheckType", check.CheckType),
 		).OrderBy("CheckedAt").
@@ -84,5 +88,5 @@ func (h *Host) addLastChecks(db *storm.DB) {
 }
 
 func (h *Host) getHostCheckTypeQuery(db *storm.DB, checkType CheckType) storm.Query {
-	return db.Select(q.Eq("HostID", h.ID), q.Eq("CheckType", checkType)).OrderBy("CheckedAt").Reverse()
+	return h.getCheckDB(db).Select(q.Eq("HostID", h.ID), q.Eq("CheckType", checkType)).OrderBy("CheckedAt").Reverse()
 }

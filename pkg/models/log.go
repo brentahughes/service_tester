@@ -57,7 +57,7 @@ func (l *Logger) storeLog(logType LogType, msg string) {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	if err := l.db.Save(newLog); err != nil {
+	if err := l.db.From("log").Save(newLog); err != nil {
 		log.Print("Error adding log to database: ", err)
 	}
 
@@ -70,6 +70,6 @@ func (l *Log) String() string {
 
 func GetLogs(db *storm.DB, limit int) ([]Log, error) {
 	var logs []Log
-	err := db.AllByIndex("CreatedAt", &logs, storm.Limit(limit))
+	err := db.From("log").AllByIndex("CreatedAt", &logs, storm.Limit(limit), storm.Reverse())
 	return logs, err
 }

@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	Port          int
-	Discovery     string
-	PublicIPDNS   string
-	InternalPDNS  string
-	CheckInterval time.Duration
+	Port           int
+	Discovery      string
+	PublicIPDNS    string
+	InternalPDNS   string
+	CheckInterval  time.Duration
+	ParallelChecks int
 }
 
 func LoadEnvConfig() (*Config, error) {
@@ -32,6 +33,15 @@ func LoadEnvConfig() (*Config, error) {
 		return nil, errors.New("no DISCOVERY_NAME defined")
 	}
 
+	parallelChecksStr := os.Getenv("PARALLEL_CHECKS")
+	parallelChecks := 20
+	if parallelChecksStr != "" {
+		parallelChecks, err = strconv.Atoi(parallelChecksStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	checkIntervalStr := os.Getenv("CHECK_INTERVAL")
 	checkInterval := 10 * time.Second
 	if checkIntervalStr != "" {
@@ -45,10 +55,11 @@ func LoadEnvConfig() (*Config, error) {
 	publicIP := "self.metadata.compute.edgeengine.io"
 
 	return &Config{
-		Port:          port,
-		Discovery:     discoveryURL,
-		CheckInterval: checkInterval,
-		InternalPDNS:  internalIP,
-		PublicIPDNS:   publicIP,
+		Port:           port,
+		Discovery:      discoveryURL,
+		CheckInterval:  checkInterval,
+		InternalPDNS:   internalIP,
+		PublicIPDNS:    publicIP,
+		ParallelChecks: parallelChecks,
 	}, nil
 }
