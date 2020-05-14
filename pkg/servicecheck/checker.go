@@ -1,9 +1,7 @@
 package servicecheck
 
 import (
-	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/asdine/storm/v3"
@@ -12,13 +10,12 @@ import (
 )
 
 type Checker struct {
-	db              *storm.DB
-	servicePort     int
-	serviceName     string
-	checkInterval   time.Duration
-	currentHostname string
-	logger          *models.Logger
-	pool            *ants.Pool
+	db            *storm.DB
+	servicePort   int
+	serviceName   string
+	checkInterval time.Duration
+	logger        *models.Logger
+	pool          *ants.PoolWithFunc
 }
 
 func NewChecker(
@@ -29,32 +26,29 @@ func NewChecker(
 	checkInterval time.Duration,
 	parallelChecks int,
 ) (*Checker, error) {
-	pool, err := ants.NewPool(parallelChecks)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Checker{
+	c := &Checker{
 		db:            db,
 		servicePort:   servicePort,
 		serviceName:   serviceName,
 		checkInterval: checkInterval,
 		logger:        logger,
-		pool:          pool,
-	}, nil
+	}
+
+	pool, err := ants.NewPoolWithFunc(parallelChecks, c.checkHost)
+	if err != nil {
+		return nil, err
+	}
+	c.pool = pool
+
+	return c, nil
 }
 
 func (c *Checker) Start() {
-	if err := c.runCheck(); err != nil {
-		c.logger.Errorf("error on first check run: %v", err)
-	}
+	c.runCheck()
 
 	tick := time.NewTicker(c.checkInterval)
 	for range tick.C {
-		if err := c.runCheck(); err != nil {
-			c.logger.Errorf("%v", err)
-			return
-		}
+		c.runCheck()
 	}
 }
 
@@ -62,47 +56,44 @@ func (c *Checker) Stop() {
 	c.logger.Infof("Shutting down checker")
 }
 
-func (c *Checker) runCheck() error {
-	ips, err := c.getHostnamesFromSRV()
-	if err != nil {
-		return err
-	}
-
-	for _, ip := range ips {
-		checkType := models.CheckPublic
-		if strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "192.") || strings.HasPrefix(ip, "172.") {
-			checkType = models.CheckInternal
-		}
-
-		if host, err := models.GetHostByIP(c.db, ip); err != nil {
-			// Run the first check if this host does not already exist
-			c.checkHost(checkType, ip)
-		} else {
-			// If the host is available then update it's last seen
-			host.Save(c.db)
-		}
-	}
+func (c *Checker) runCheck() {
+	c.discoverNewHosts()
 
 	hosts, err := models.GetRecentHosts(c.db)
 	if err != nil {
-		return fmt.Errorf("error getting recent hosts: %v", err)
+		c.logger.Errorf("error getting recent hosts: %v", err)
+		return
 	}
 
 	for _, host := range hosts {
-		if host.Hostname == c.currentHostname {
-			continue
-		}
+		c.pool.Invoke(host)
+	}
+}
 
-		if host.InternalIP != "" {
-			c.checkHost(models.CheckInternal, host.InternalIP)
-		}
-
-		if host.PublicIP != "" {
-			c.checkHost(models.CheckPublic, host.PublicIP)
-		}
+func (c *Checker) discoverNewHosts() {
+	ips, err := c.getHostnamesFromSRV()
+	if err != nil {
+		c.logger.Errorf("error checking discovery endpoint (%s) %v", c.serviceName, err)
 	}
 
-	return nil
+	for _, ip := range ips {
+		host, err := models.GetHostByIP(c.db, ip)
+		if err != nil {
+			if err != storm.ErrNotFound {
+				c.logger.Errorf("error looking up host by ip (%s) %v", ip, err)
+				continue
+			}
+
+			// Call health endpoint and save host information
+			c.newHost(ip)
+		} else {
+			// Update the last seen
+			if err := host.Save(c.db); err != nil {
+				c.logger.Errorf("error updating host (%s): %v", host.Hostname, err)
+				continue
+			}
+		}
+	}
 }
 
 func (c *Checker) getHostnamesFromSRV() ([]string, error) {

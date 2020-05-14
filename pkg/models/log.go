@@ -19,6 +19,7 @@ type LogType string
 
 type Logger struct {
 	db *storm.DB
+	ch chan Log
 }
 
 type Log struct {
@@ -29,9 +30,14 @@ type Log struct {
 }
 
 func NewLogger(db *storm.DB) *Logger {
-	return &Logger{
+	l := &Logger{
 		db: db,
+		ch: make(chan Log, 0),
 	}
+
+	go l.logSaver()
+
+	return l
 }
 
 func (l *Logger) Debugf(format string, v ...interface{}) {
@@ -62,6 +68,39 @@ func (l *Logger) storeLog(logType LogType, msg string) {
 	}
 
 	fmt.Println(newLog.String())
+}
+
+func (l *Logger) logSaver() {
+	t := time.NewTicker(time.Minute)
+
+	var logs []Log
+	for {
+		select {
+		case newLog := <-l.ch:
+			logs = append(logs, newLog)
+
+			if len(logs) > 100 {
+				l.saveLogs(logs)
+				logs = make([]Log, 0)
+			}
+		case <-t.C:
+			if len(logs) > 0 {
+				l.saveLogs(logs)
+				logs = make([]Log, 0)
+			}
+		}
+	}
+
+}
+
+func (l *Logger) saveLogs(logs []Log) {
+	n := l.db.WithBatch(true).From("log")
+
+	for _, lo := range logs {
+		if err := n.Save(lo); err != nil {
+			log.Print("Error adding log to database: ", err)
+		}
+	}
 }
 
 func (l *Log) String() string {

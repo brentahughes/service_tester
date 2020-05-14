@@ -8,7 +8,6 @@ import (
 )
 
 type overview struct {
-	PublicHosts []models.Host
 	CurrentHost models.Host
 	Hosts       []models.Host
 	Logs        []models.Log
@@ -16,12 +15,6 @@ type overview struct {
 
 func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Request) {
 	currentHost, err := models.GetCurrentHost(s.db)
-	if err != nil {
-		s.writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-
-	publicHosts, err := models.GetHostsWithPublicIPs(s.db)
 	if err != nil {
 		s.writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -46,7 +39,6 @@ func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Reques
 	}
 
 	o := overview{
-		PublicHosts: publicHosts,
 		CurrentHost: *currentHost,
 		Hosts:       hosts,
 		Logs:        logs,

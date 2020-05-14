@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/models"
 )
 
@@ -20,89 +19,61 @@ type checkHostResponse struct {
 	errorMessage error
 }
 
-func (c *Checker) checkHost(checkType models.CheckType, endpoint string) {
-	c.pool.Submit(func() { c.runHostCheck(checkType, endpoint) })
-}
-
-func (c *Checker) runHostCheck(checkType models.CheckType, endpoint string) {
-	host, err := models.GetHostByIP(c.db, endpoint)
-	if err != nil && err != storm.ErrNotFound {
-		c.logger.Errorf("error checking for existing host on ip %s: %v", endpoint, err)
-		return
-	}
-
-	if host == nil {
-		host = &models.Host{
-			Port: c.servicePort,
-		}
-
-		switch checkType {
-		case models.CheckInternal:
-			host.InternalIP = endpoint
-		case models.CheckPublic:
-			host.PublicIP = endpoint
-		}
-	}
-	if host.CurrentHost {
-		return
-	}
-
-	resp := c.checkEndpoint(endpoint)
-	if host.ID == 0 && resp.errorMessage != nil {
-		return
-	}
-
-	check := &models.Check{
-		CheckType:    checkType,
-		Status:       models.StatusSuccess,
-		StatusCode:   resp.statusCode,
-		ResponseBody: resp.responseBody,
-		ResponseTime: resp.responseTime,
-	}
-
+func (c *Checker) newHost(ip string) {
+	resp := c.checkHealth(ip)
 	if resp.errorMessage != nil {
-		check.Status = models.StatusError
-		check.CheckErrorMessage = resp.errorMessage.Error()
-	} else {
-		existingHost, _ := models.GetHostByHostname(c.db, resp.Hostname)
-		if existingHost != nil {
-			host = existingHost
-		}
+		c.logger.Errorf("error getting health of new host: %s", resp.errorMessage)
+		return
+	}
 
-		host.Hostname = resp.Hostname
-
-		if resp.PublicIP != "" {
-			host.PublicIP = resp.PublicIP
-		}
-		if resp.InternalIP != "" {
-			host.InternalIP = resp.InternalIP
-		}
+	host := &models.Host{
+		Hostname:   resp.Hostname,
+		PublicIP:   resp.PublicIP,
+		InternalIP: resp.InternalIP,
 	}
 
 	if err := host.Save(c.db); err != nil {
 		c.logger.Errorf("error saving host (%s): %v", host.Hostname, err)
 		return
 	}
+}
+
+func (c *Checker) checkHost(input interface{}) {
+	host := input.(models.Host)
+
+	resp := c.checkHealth(host.PublicIP)
+
+	check := &models.Check{
+		CheckType:    models.CheckTCP,
+		Status:       models.StatusSuccess,
+		StatusCode:   resp.statusCode,
+		ResponseBody: resp.responseBody,
+		ResponseTime: resp.responseTime,
+		Network:      models.NetworkPublic,
+	}
+
+	if resp.errorMessage != nil {
+		check.CheckErrorMessage = resp.errorMessage.Error()
+		check.Status = models.StatusError
+	}
 
 	if err := host.AddCheck(c.db, check); err != nil {
-		c.logger.Errorf("error adding check: ", err)
+		c.logger.Errorf("error adding check: %v", err)
 		return
 	}
 }
 
-func (c *Checker) checkEndpoint(host string) (checkResp checkHostResponse) {
+func (c *Checker) checkHealth(host string) (checkResp checkHostResponse) {
 	client := http.DefaultClient
-	client.Timeout = 1 * time.Second
+	client.Timeout = 3 * time.Second
 	defer client.CloseIdleConnections()
 
 	timer := time.Now()
 	resp, err := client.Get(fmt.Sprintf("http://%s:%d/api/health", host, c.servicePort))
 	checkResp.responseTime = time.Since(timer)
-
 	if err != nil {
 		checkResp.statusCode = 408
 		checkResp.errorMessage = err
-		c.logger.Errorf("error checking %s health: %v", host, err)
 		return
 	}
 	defer resp.Body.Close()

@@ -66,9 +66,9 @@
           class="badge badge-pill badge-danger"
           data-toggle="tooltip"
           title="{{ .LatestChecks.Internal.CheckErrorMessage }}"
-        >{{ .LatestChecks.Public.StatusCode }}</span>
+        >DOWN</span>
         {{ else }}
-        <span class="badge badge-pill badge-success">{{ .LatestChecks.Public.StatusCode }}</span>
+        <span class="badge badge-pill badge-success">UP</span>
         {{ end }}
         {{ end }}
       </td>
@@ -81,9 +81,9 @@
           class="badge badge-pill badge-danger"
           data-toggle="tooltip"
           title="{{ .LatestChecks.Internal.CheckErrorMessage }}"
-        >{{ .LatestChecks.Internal.StatusCode }}</span>
+        >DOWN</span>
         {{ else }}
-        <span class="badge badge-pill badge-success">{{ .LatestChecks.Internal.StatusCode }}</span>
+        <span class="badge badge-pill badge-success">UP</span>
         {{ end }}
         {{ end }}
       </td>

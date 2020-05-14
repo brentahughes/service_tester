@@ -89,7 +89,7 @@ func GetRecentHostsWithChecks(db *storm.DB) ([]Host, error) {
 
 func GetRecentHosts(db *storm.DB) ([]Host, error) {
 	var hosts []Host
-	if err := db.From("host").AllByIndex("Hostname", &hosts); err != nil {
+	if err := db.From("host").Select(q.Eq("CurrentHost", false)).OrderBy("Hostname").Find(&hosts); err != nil {
 		return nil, err
 	}
 
@@ -101,24 +101,6 @@ func GetRecentHosts(db *storm.DB) ([]Host, error) {
 	}
 
 	return recents, nil
-}
-
-func GetHostsWithPublicIPs(db *storm.DB) ([]Host, error) {
-	currentHost, err := GetCurrentHost(db)
-	if err != nil {
-		return nil, err
-	}
-
-	var hosts []Host
-	if err := db.From("host").Select(
-		q.Not(
-			q.Eq("PublicIP", ""),
-			q.Eq("Hostname", currentHost.Hostname),
-		),
-	).OrderBy("Hostname").Find(&hosts); err != nil {
-		return nil, err
-	}
-	return hosts, nil
 }
 
 func (h *Host) Save(db *storm.DB) error {

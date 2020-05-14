@@ -21,7 +21,7 @@
               {{ .CurrentHost.Hostname }}
             </a>
             <div class="dropdown-menu bg-dark" aria-labelledby="navbarDropdown">
-              {{ range .PublicHosts }}
+              {{ range .Hosts }}
               <a class="dropdown-item text-white-50" href="http://{{ .PublicIP }}:{{ .Port }}">{{ .Hostname }}</a>
               {{ end }}
             </div>
