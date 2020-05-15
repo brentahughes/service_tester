@@ -2,11 +2,13 @@ package servicecheck
 
 import (
 	"net"
+	"net/http"
 	"time"
 
 	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/config"
 	"github.com/brentahughes/service_tester/pkg/models"
+	"github.com/digineo/go-ping"
 	"github.com/panjf2000/ants"
 )
 
@@ -17,6 +19,8 @@ type Checker struct {
 	checkInterval time.Duration
 	logger        *models.Logger
 	pool          *ants.PoolWithFunc
+	pinger        *ping.Pinger
+	httpClient    *http.Client
 }
 
 func NewChecker(
@@ -30,6 +34,9 @@ func NewChecker(
 		serviceName:   conf.Discovery,
 		checkInterval: conf.CheckInterval,
 		logger:        logger,
+		httpClient: &http.Client{
+			Timeout: checkTimeout,
+		},
 	}
 
 	pool, err := ants.NewPoolWithFunc(conf.ParallelChecks, c.checkHost)
@@ -37,6 +44,12 @@ func NewChecker(
 		return nil, err
 	}
 	c.pool = pool
+
+	pinger, err := ping.New("0.0.0.0", "")
+	if err != nil {
+		return nil, err
+	}
+	c.pinger = pinger
 
 	return c, nil
 }
@@ -52,6 +65,9 @@ func (c *Checker) Start() {
 
 func (c *Checker) Stop() {
 	c.logger.Infof("Shutting down checker")
+	c.httpClient.CloseIdleConnections()
+	c.pinger.Close()
+	c.pool.Release()
 }
 
 func (c *Checker) runCheck() {

@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/http"
 	"time"
 
 	"github.com/brentahughes/service_tester/pkg/models"
-	ping "github.com/digineo/go-ping"
 )
+
+const checkTimeout = 3 * time.Second
 
 type healthResponse struct {
 	models.Host
@@ -80,15 +80,10 @@ func (c *Checker) checkNetworkICMP(host models.Host, network models.Network) {
 		Status:       models.StatusSuccess,
 		StatusCode:   200,
 		Network:      network,
-		ResponseTime: 3 * time.Second,
+		ResponseTime: checkTimeout,
 	}
 
-	p, err := ping.New("0.0.0.0", "")
-	if err != nil {
-		c.logger.Errorf("error setting up pinger %v", err)
-	}
-
-	duration, err := p.Ping(parsedIP, 3*time.Second)
+	duration, err := c.pinger.Ping(parsedIP, checkTimeout)
 	if err != nil {
 		check.Status = models.StatusError
 		check.StatusCode = 500
@@ -145,7 +140,7 @@ func (c *Checker) checkNetworkTCP(host models.Host, network models.Network) {
 	}
 
 	start := time.Now()
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, c.servicePort), 3*time.Second)
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, c.servicePort), checkTimeout)
 	if err != nil {
 		check.CheckErrorMessage = err.Error()
 		check.Status = models.StatusError
@@ -199,7 +194,7 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 
 	raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, c.servicePort))
 	if err != nil {
-		c.logger.Errorf("error resolvind udp addr %s:%d %v", ip, c.servicePort, err)
+		c.logger.Errorf("error resolving udp addr %s:%d %v", ip, c.servicePort, err)
 		return
 	}
 
@@ -211,7 +206,7 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 		check.StatusCode = 500
 	} else {
 		defer conn.Close()
-		conn.SetDeadline(time.Now().Add(3 * time.Second))
+		conn.SetDeadline(time.Now().Add(checkTimeout))
 
 		fmt.Fprintln(conn, host.Hostname)
 		message, err := bufio.NewReader(conn).ReadBytes('\n')
@@ -225,7 +220,7 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 		if len(message) > 0 {
 			var resp serviceResponse
 			if err := json.Unmarshal(message, &resp); err != nil {
-				c.logger.Errorf("error unmarshaling tcp response %s:%d %v", ip, c.servicePort, err)
+				c.logger.Errorf("error un marshaling tcp response %s:%d %v", ip, c.servicePort, err)
 				return
 			}
 
@@ -246,12 +241,8 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 }
 
 func (c *Checker) checkHealth(host string) (checkResp healthResponse) {
-	client := http.DefaultClient
-	client.Timeout = 3 * time.Second
-	defer client.CloseIdleConnections()
-
 	timer := time.Now()
-	resp, err := client.Get(fmt.Sprintf("http://%s/api/health", host))
+	resp, err := c.httpClient.Get(fmt.Sprintf("http://%s/api/health", host))
 	checkResp.responseTime = time.Since(timer)
 	if err != nil {
 		checkResp.statusCode = 408

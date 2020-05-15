@@ -94,7 +94,12 @@ func (h *Host) AddCheck(db *storm.DB, check *Check) error {
 
 func (h *Host) addChecks(db *storm.DB) {
 	var checks Checks
-	if err := h.getCheckDB(db).AllByIndex("CheckedAt", &checks, storm.Reverse()); err != nil {
+	err := h.getCheckDB(db).
+		Select(q.Gte("CheckedAt", time.Now().Add(-12*time.Hour))).
+		Reverse().
+		OrderBy("CheckedAt").
+		Find(&checks)
+	if err != nil {
 		logger.Errorf("error getting internal checks %v", err)
 		return
 	}
