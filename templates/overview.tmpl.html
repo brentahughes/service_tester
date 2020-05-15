@@ -57,30 +57,30 @@
   {{ range .Hosts }}
     <tr>
       <td><a class="text-white" href="http://{{ .PublicIP }}:{{ .Port }}">{{ .Hostname }}</a></td>
-      <td class="{{ .LatestChecks.Public.Status }}">
+      <td class="{{ .LatestHTTPChecks.Public.Status }}">
         {{ .PublicIP }}
 
-        {{ if .LatestChecks.Public.StatusCode }}
-        {{ if gt .LatestChecks.Public.StatusCode 399 }}
+        {{ if .LatestHTTPChecks.Public.StatusCode }}
+        {{ if gt .LatestHTTPChecks.Public.StatusCode 399 }}
         <span
           class="badge badge-pill badge-danger"
           data-toggle="tooltip"
-          title="{{ .LatestChecks.Internal.CheckErrorMessage }}"
+          title="{{ .LatestHTTPChecks.Internal.CheckErrorMessage }}"
         >DOWN</span>
         {{ else }}
         <span class="badge badge-pill badge-success">UP</span>
         {{ end }}
         {{ end }}
       </td>
-      <td class="{{ .LatestChecks.Internal.Status }}">
+      <td class="{{ .LatestHTTPChecks.Internal.Status }}">
         {{ .InternalIP }}
 
-        {{ if .LatestChecks.Internal.StatusCode }}
-        {{ if gt .LatestChecks.Internal.StatusCode 399 }}
+        {{ if .LatestHTTPChecks.Internal.StatusCode }}
+        {{ if gt .LatestHTTPChecks.Internal.StatusCode 399 }}
         <span
           class="badge badge-pill badge-danger"
           data-toggle="tooltip"
-          title="{{ .LatestChecks.Internal.CheckErrorMessage }}"
+          title="{{ .LatestHTTPChecks.Internal.CheckErrorMessage }}"
         >DOWN</span>
         {{ else }}
         <span class="badge badge-pill badge-success">UP</span>

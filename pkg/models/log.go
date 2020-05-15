@@ -15,6 +15,8 @@ const (
 	LogTypeError LogType = "ERROR"
 )
 
+var logger *Logger
+
 type LogType string
 
 type Logger struct {
@@ -37,6 +39,7 @@ func NewLogger(db *storm.DB) *Logger {
 
 	go l.logSaver()
 
+	logger = l
 	return l
 }
 

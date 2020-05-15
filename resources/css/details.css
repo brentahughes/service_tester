@@ -6,7 +6,17 @@
 
 .graph {
     position: relative;
-    height: 400px;
+    height: 250px;
     width: 95%;
     margin: auto;
+}
+
+.check-container  {
+    height: 400px;
+    overflow-y: scroll;
+    font-size: 12px;
+}
+
+.spacer {
+    height: 50px;
 }

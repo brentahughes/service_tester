@@ -23,18 +23,25 @@ type Host struct {
 	FirstSeenAt       time.Time
 	LastSeenAt        time.Time `json:"index"`
 
-	LatestChecks LatestChecks `json:"-"`
-	Checks       Checks       `json:"-"`
+	LatestHTTPChecks LatestHTTPChecks `json:"-"`
+	Checks           ServiceChecks    `json:"-"`
 }
 
-type LatestChecks struct {
+type LatestHTTPChecks struct {
 	Internal Check
 	Public   Check
 }
 
-type Checks struct {
-	Internal []Check
-	Public   []Check
+type ServiceChecks struct {
+	Internal CheckTypes
+	Public   CheckTypes
+}
+
+type CheckTypes struct {
+	HTTP []Check
+	TCP  []Check
+	UDP  []Check
+	ICMP []Check
 }
 
 func GetHostByHostname(db *storm.DB, hostname string) (*Host, error) {
@@ -80,7 +87,7 @@ func GetRecentHostsWithChecks(db *storm.DB) ([]Host, error) {
 	}
 
 	for i, host := range hosts {
-		host.addLastChecks(db)
+		host.addLastHTTPChecks(db)
 		hosts[i] = host
 	}
 

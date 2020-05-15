@@ -22,7 +22,7 @@
             </a>
             <div class="dropdown-menu bg-dark" aria-labelledby="navbarDropdown">
               {{ range .Hosts }}
-              <a class="dropdown-item text-white-50" href="http://{{ .PublicIP }}:{{ .Port }}">{{ .Hostname }}</a>
+              <a class="dropdown-item text-white-50" href="http://{{ .PublicIP }}">{{ .Hostname }}</a>
               {{ end }}
             </div>
           </li>
@@ -32,10 +32,10 @@
           </li>
         </ul>
       </div>
-  </nav>
+    </nav>
 
-    <div class="container-xl main-container">
-        <div class="content-container">{{ template "content" . }}</div>
+    <div class="container-fluid main-container">
+        <div class="container-fluid content-container">{{ template "content" . }}</div>
     </div>
 
     <script src="/resources/js/jquery-3.4.1.min.js"></script>

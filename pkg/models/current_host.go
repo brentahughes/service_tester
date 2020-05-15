@@ -15,7 +15,7 @@ import (
 
 func GetCurrentHost(db *storm.DB) (*Host, error) {
 	var host Host
-	if err := db.Select(q.Eq("CurrentHost", true)).First(&host); err != nil {
+	if err := db.From("host").Select(q.Eq("CurrentHost", true)).First(&host); err != nil {
 		return nil, err
 	}
 
@@ -33,7 +33,7 @@ func GetCurrentHost(db *storm.DB) (*Host, error) {
 	host.HostUptime = uptimeDur
 
 	hosts, err := GetRecentHosts(db)
-	if err != nil {
+	if err != nil && err != storm.ErrNotFound {
 		return nil, err
 	}
 
@@ -52,17 +52,16 @@ func UpdateCurrentHost(db *storm.DB, conf *config.Config) error {
 	}
 
 	if host == nil {
-		hostname, err := os.Hostname()
-		if err != nil {
-			return err
-		}
-
 		host = &Host{
 			CurrentHost:       true,
-			Hostname:          hostname,
 			ServiceRestarts:   -1,
 			ServiceFirstStart: time.Now().UTC(),
 		}
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return err
 	}
 
 	internal, public, err := getLocalHostIPs(conf)
@@ -70,11 +69,13 @@ func UpdateCurrentHost(db *storm.DB, conf *config.Config) error {
 		return err
 	}
 
+	host.Hostname = hostname
 	host.InternalIP = internal
 	host.PublicIP = public
 	host.ServiceLastStart = time.Now().UTC()
+	host.Port = conf.ServicePort
 	host.ServiceRestarts++
-	return db.Save(host)
+	return db.From("host").Save(host)
 }
 
 func getLocalHostIPs(conf *config.Config) (string, string, error) {

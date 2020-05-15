@@ -32,7 +32,7 @@ func NewServer(config config.Config, db *storm.DB, logger *models.Logger, port i
 	}
 }
 
-func (s *Server) Start() {
+func (s *Server) Start() error {
 	// Root resources and redirect
 	rootRouter := mux.NewRouter()
 	rootRouter.PathPrefix("/resources/").Handler(http.StripPrefix("/resources/", http.FileServer(http.Dir("resources"))))
@@ -53,8 +53,8 @@ func (s *Server) Start() {
 
 	http.Handle("/", rootRouter)
 
-	s.logger.Infof("Listing on :%d", s.port)
-	http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
+	s.logger.Infof("web interface listening on :%d", s.port)
+	return http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
 }
 
 func (s *Server) Stop() {

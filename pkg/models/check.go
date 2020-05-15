@@ -20,6 +20,7 @@ const (
 	CheckTCP  CheckType = "TCP"
 	CheckUDP  CheckType = "UDP"
 	CheckICMP CheckType = "ICMP"
+	CheckHTTP CheckType = "HTTP"
 )
 
 type Network string
@@ -27,9 +28,8 @@ type CheckType string
 type Status string
 
 type Check struct {
-	ID                int    `storm:"id,increment"`
-	HostID            int    `storm:"index"`
-	Status            Status `storm:"index"`
+	ID                int `storm:"id,increment"`
+	Status            Status
 	ResponseTime      time.Duration
 	StatusCode        int
 	ResponseBody      string
@@ -39,12 +39,33 @@ type Check struct {
 	CheckedAt         time.Time `storm:"index"`
 }
 
+type Checks []Check
+
+func (c Checks) getByType(t CheckType) Checks {
+	var checks Checks
+	for _, check := range c {
+		if check.CheckType == t {
+			checks = append(checks, check)
+		}
+	}
+	return checks
+}
+
+func (c Checks) getByNetwork(n Network) Checks {
+	var checks Checks
+	for _, check := range c {
+		if check.Network == n {
+			checks = append(checks, check)
+		}
+	}
+	return checks
+}
+
 func (h *Host) getCheckDB(db *storm.DB) storm.Node {
 	return db.From(fmt.Sprintf("host.%d.check", h.ID))
 }
 
 func (h *Host) AddCheck(db *storm.DB, check *Check) error {
-	check.HostID = h.ID
 	check.CheckedAt = time.Now().UTC()
 	if err := h.getCheckDB(db).Save(check); err != nil {
 		return err
@@ -52,7 +73,7 @@ func (h *Host) AddCheck(db *storm.DB, check *Check) error {
 
 	// Check If more than 100 checks exist and delete older ones
 	count, err := h.getCheckDB(db).
-		Select(q.Eq("HostID", h.ID), q.Eq("CheckType", check.CheckType), q.Eq("Network", check.Network)).
+		Select(q.Eq("CheckType", check.CheckType), q.Eq("Network", check.Network)).
 		Count(&Check{})
 	if err != nil {
 		return err
@@ -60,7 +81,7 @@ func (h *Host) AddCheck(db *storm.DB, check *Check) error {
 
 	if count > checkLimit {
 		query := h.getCheckDB(db).
-			Select(q.Eq("HostID", h.ID), q.Eq("CheckType", check.CheckType), q.Eq("Network", check.Network)).
+			Select(q.Eq("CheckType", check.CheckType), q.Eq("Network", check.Network)).
 			OrderBy("CheckedAt").
 			Limit(count - checkLimit)
 		if err := query.Delete(&Check{}); err != nil && err != storm.ErrNotFound {
@@ -72,29 +93,48 @@ func (h *Host) AddCheck(db *storm.DB, check *Check) error {
 }
 
 func (h *Host) addChecks(db *storm.DB) {
-	var checks []Check
-
-	if err := h.getHostCheckByNetwork(db, NetworkInternal).Find(&checks); err == nil {
-		h.Checks.Internal = checks
+	var checks Checks
+	if err := h.getCheckDB(db).AllByIndex("CheckedAt", &checks, storm.Reverse()); err != nil {
+		logger.Errorf("error getting internal checks %v", err)
+		return
 	}
 
-	if err := h.getHostCheckByNetwork(db, NetworkPublic).Find(&checks); err == nil {
-		h.Checks.Public = checks
-	}
+	h.Checks.Internal.HTTP = checks.getByType(CheckHTTP).getByNetwork(NetworkInternal)
+	h.Checks.Internal.TCP = checks.getByType(CheckTCP).getByNetwork(NetworkInternal)
+	h.Checks.Internal.UDP = checks.getByType(CheckUDP).getByNetwork(NetworkInternal)
+	h.Checks.Internal.ICMP = checks.getByType(CheckICMP).getByNetwork(NetworkInternal)
+	h.Checks.Public.HTTP = checks.getByType(CheckHTTP).getByNetwork(NetworkPublic)
+	h.Checks.Public.TCP = checks.getByType(CheckTCP).getByNetwork(NetworkPublic)
+	h.Checks.Public.UDP = checks.getByType(CheckUDP).getByNetwork(NetworkPublic)
+	h.Checks.Public.ICMP = checks.getByType(CheckICMP).getByNetwork(NetworkPublic)
 }
 
-func (h *Host) addLastChecks(db *storm.DB) {
+func (h *Host) addLastHTTPChecks(db *storm.DB) {
 	var check Check
 
-	if err := h.getHostCheckByNetwork(db, NetworkInternal).First(&check); err == nil {
-		h.LatestChecks.Internal = check
+	err := h.getCheckDB(db).
+		Select(q.Eq("Network", NetworkInternal), q.Eq("CheckType", CheckHTTP)).
+		OrderBy("CheckedAt").
+		Reverse().
+		First(&check)
+	if err == nil {
+		h.LatestHTTPChecks.Internal = check
+	} else {
+		logger.Errorf("error getting last http check %v", err)
 	}
 
-	if err := h.getHostCheckByNetwork(db, NetworkPublic).First(&check); err == nil {
-		h.LatestChecks.Public = check
+	err = h.getCheckDB(db).
+		Select(q.Eq("Network", NetworkPublic), q.Eq("CheckType", CheckHTTP)).
+		OrderBy("CheckedAt").
+		Reverse().
+		First(&check)
+	if err == nil {
+		h.LatestHTTPChecks.Public = check
+	} else {
+		logger.Errorf("error getting last http check %v", err)
 	}
 }
 
 func (h *Host) getHostCheckByNetwork(db *storm.DB, network Network) storm.Query {
-	return h.getCheckDB(db).Select(q.Eq("HostID", h.ID), q.Eq("Network", network)).OrderBy("CheckedAt").Reverse()
+	return h.getCheckDB(db).Select(q.Eq("Network", network)).OrderBy("CheckedAt").Reverse()
 }

@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"net/http"
 
+	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/models"
 )
 
@@ -15,15 +16,17 @@ type overview struct {
 
 func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Request) {
 	currentHost, err := models.GetCurrentHost(s.db)
-	if err != nil {
+	if err != nil && err != storm.ErrNotFound {
 		s.writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	hosts, err := models.GetRecentHostsWithChecks(s.db)
 	if err != nil {
-		s.writeErr(w, http.StatusInternalServerError, err)
-		return
+		if err != storm.ErrNotFound {
+			s.writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
 	}
 
 	t, err := template.ParseFiles("templates/layout.tmpl.html", "templates/overview.tmpl.html")
@@ -33,7 +36,7 @@ func (s *Server) handleDashboardOverview(w http.ResponseWriter, req *http.Reques
 	}
 
 	logs, err := models.GetLogs(s.db, 150)
-	if err != nil {
+	if err != nil && err != storm.ErrNotFound {
 		s.writeErr(w, http.StatusInternalServerError, err)
 		return
 	}

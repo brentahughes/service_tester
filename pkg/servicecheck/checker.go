@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/asdine/storm/v3"
+	"github.com/brentahughes/service_tester/pkg/config"
 	"github.com/brentahughes/service_tester/pkg/models"
 	"github.com/panjf2000/ants"
 )
@@ -20,21 +21,18 @@ type Checker struct {
 
 func NewChecker(
 	db *storm.DB,
-	serviceName string,
-	servicePort int,
 	logger *models.Logger,
-	checkInterval time.Duration,
-	parallelChecks int,
+	conf *config.Config,
 ) (*Checker, error) {
 	c := &Checker{
 		db:            db,
-		servicePort:   servicePort,
-		serviceName:   serviceName,
-		checkInterval: checkInterval,
+		servicePort:   conf.ServicePort,
+		serviceName:   conf.Discovery,
+		checkInterval: conf.CheckInterval,
 		logger:        logger,
 	}
 
-	pool, err := ants.NewPoolWithFunc(parallelChecks, c.checkHost)
+	pool, err := ants.NewPoolWithFunc(conf.ParallelChecks, c.checkHost)
 	if err != nil {
 		return nil, err
 	}

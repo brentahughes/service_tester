@@ -1,22 +1,31 @@
 package servicecheck
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/brentahughes/service_tester/pkg/models"
+	ping "github.com/digineo/go-ping"
 )
 
-type checkHostResponse struct {
+type healthResponse struct {
 	models.Host
 
 	statusCode   int
 	responseBody string
 	responseTime time.Duration
 	errorMessage error
+}
+
+type serviceResponse struct {
+	Status        string `json:"status"`
+	ReceivedInput string `json:"receivedInput,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 func (c *Checker) newHost(ip string) {
@@ -41,20 +50,50 @@ func (c *Checker) newHost(ip string) {
 func (c *Checker) checkHost(input interface{}) {
 	host := input.(models.Host)
 
-	resp := c.checkHealth(host.PublicIP)
-
-	check := &models.Check{
-		CheckType:    models.CheckTCP,
-		Status:       models.StatusSuccess,
-		StatusCode:   resp.statusCode,
-		ResponseBody: resp.responseBody,
-		ResponseTime: resp.responseTime,
-		Network:      models.NetworkPublic,
+	if host.PublicIP != "" {
+		c.checkNetworkHTTP(host, models.NetworkPublic)
+		c.checkNetworkICMP(host, models.NetworkPublic)
+		c.checkNetworkTCP(host, models.NetworkPublic)
+		c.checkNetworkUDP(host, models.NetworkPublic)
 	}
 
-	if resp.errorMessage != nil {
-		check.CheckErrorMessage = resp.errorMessage.Error()
+	if host.InternalIP != "" {
+		c.checkNetworkHTTP(host, models.NetworkInternal)
+		c.checkNetworkICMP(host, models.NetworkInternal)
+		c.checkNetworkTCP(host, models.NetworkInternal)
+		c.checkNetworkUDP(host, models.NetworkInternal)
+	}
+}
+
+func (c *Checker) checkNetworkICMP(host models.Host, network models.Network) {
+	ip := host.PublicIP
+	if network == models.NetworkInternal {
+		ip = host.InternalIP
+	}
+
+	parsedIP := &net.IPAddr{
+		IP: net.ParseIP(ip),
+	}
+
+	check := &models.Check{
+		CheckType:    models.CheckICMP,
+		Status:       models.StatusSuccess,
+		StatusCode:   200,
+		Network:      network,
+		ResponseTime: 3 * time.Second,
+	}
+
+	p, err := ping.New("0.0.0.0", "")
+	if err != nil {
+		c.logger.Errorf("error setting up pinger %v", err)
+	}
+
+	duration, err := p.Ping(parsedIP, 3*time.Second)
+	if err != nil {
 		check.Status = models.StatusError
+		check.StatusCode = 500
+	} else {
+		check.ResponseTime = duration
 	}
 
 	if err := host.AddCheck(c.db, check); err != nil {
@@ -63,13 +102,156 @@ func (c *Checker) checkHost(input interface{}) {
 	}
 }
 
-func (c *Checker) checkHealth(host string) (checkResp checkHostResponse) {
+func (c *Checker) checkNetworkHTTP(host models.Host, network models.Network) {
+	ip := host.PublicIP
+	if network == models.NetworkInternal {
+		ip = host.InternalIP
+	}
+
+	check := &models.Check{
+		CheckType:  models.CheckHTTP,
+		Status:     models.StatusSuccess,
+		StatusCode: 200,
+		Network:    network,
+	}
+
+	resp := c.checkHealth(ip)
+	if resp.errorMessage != nil {
+		check.CheckErrorMessage = resp.errorMessage.Error()
+		check.Status = models.StatusError
+	} else {
+		check.ResponseBody = resp.responseBody
+	}
+	check.StatusCode = resp.statusCode
+	check.ResponseTime = resp.responseTime
+
+	if err := host.AddCheck(c.db, check); err != nil {
+		c.logger.Errorf("error adding check: %v", err)
+		return
+	}
+}
+
+func (c *Checker) checkNetworkTCP(host models.Host, network models.Network) {
+	ip := host.PublicIP
+	if network == models.NetworkInternal {
+		ip = host.InternalIP
+	}
+
+	check := &models.Check{
+		CheckType:  models.CheckTCP,
+		Status:     models.StatusSuccess,
+		StatusCode: 200,
+		Network:    network,
+	}
+
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, c.servicePort), 3*time.Second)
+	if err != nil {
+		check.CheckErrorMessage = err.Error()
+		check.Status = models.StatusError
+		check.StatusCode = 500
+	} else {
+		defer conn.Close()
+		fmt.Fprintln(conn, host.Hostname)
+		message, err := bufio.NewReader(conn).ReadBytes('\n')
+
+		if err != nil {
+			check.CheckErrorMessage = err.Error()
+			check.Status = models.StatusError
+			check.StatusCode = 500
+		}
+
+		if len(message) > 0 {
+			var resp serviceResponse
+			if err := json.Unmarshal(message, &resp); err != nil {
+				c.logger.Errorf("error unmarshaling tcp response %s:%d %v", ip, c.servicePort, err)
+				return
+			}
+
+			check.ResponseBody = string(message)
+			if resp.Status == "error" {
+				check.Status = models.StatusError
+				check.StatusCode = 500
+				check.CheckErrorMessage = resp.Error
+			}
+		}
+	}
+
+	check.ResponseTime = time.Since(start)
+	if err := host.AddCheck(c.db, check); err != nil {
+		c.logger.Errorf("error adding check: %v", err)
+		return
+	}
+}
+
+func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
+	ip := host.PublicIP
+	if network == models.NetworkInternal {
+		ip = host.InternalIP
+	}
+
+	check := &models.Check{
+		CheckType:  models.CheckUDP,
+		Status:     models.StatusSuccess,
+		StatusCode: 200,
+		Network:    network,
+	}
+
+	raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, c.servicePort))
+	if err != nil {
+		c.logger.Errorf("error resolvind udp addr %s:%d %v", ip, c.servicePort, err)
+		return
+	}
+
+	start := time.Now()
+	conn, err := net.DialUDP("udp", nil, raddr)
+	if err != nil {
+		check.CheckErrorMessage = err.Error()
+		check.Status = models.StatusError
+		check.StatusCode = 500
+	} else {
+		defer conn.Close()
+		conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+		fmt.Fprintln(conn, host.Hostname)
+		message, err := bufio.NewReader(conn).ReadBytes('\n')
+
+		if err != nil {
+			check.CheckErrorMessage = err.Error()
+			check.Status = models.StatusError
+			check.StatusCode = 500
+		}
+
+		if len(message) > 0 {
+			var resp serviceResponse
+			if err := json.Unmarshal(message, &resp); err != nil {
+				c.logger.Errorf("error unmarshaling tcp response %s:%d %v", ip, c.servicePort, err)
+				return
+			}
+
+			check.ResponseBody = string(message)
+			if resp.Status == "error" {
+				check.Status = models.StatusError
+				check.StatusCode = 500
+				check.CheckErrorMessage = resp.Error
+			}
+		}
+	}
+
+	check.ResponseTime = time.Since(start)
+	if err := host.AddCheck(c.db, check); err != nil {
+		c.logger.Errorf("error adding check: %v", err)
+		return
+	}
+}
+
+func (c *Checker) checkHealth(host string) (checkResp healthResponse) {
 	client := http.DefaultClient
 	client.Timeout = 3 * time.Second
 	defer client.CloseIdleConnections()
 
 	timer := time.Now()
-	resp, err := client.Get(fmt.Sprintf("http://%s:%d/api/health", host, c.servicePort))
+	resp, err := client.Get(fmt.Sprintf("http://%s/api/health", host))
 	checkResp.responseTime = time.Since(timer)
 	if err != nil {
 		checkResp.statusCode = 408

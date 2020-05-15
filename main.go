@@ -9,6 +9,7 @@ import (
 	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/config"
 	"github.com/brentahughes/service_tester/pkg/models"
+	"github.com/brentahughes/service_tester/pkg/service"
 	"github.com/brentahughes/service_tester/pkg/servicecheck"
 	"github.com/brentahughes/service_tester/pkg/webserver"
 )
@@ -35,7 +36,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	checker, err := servicecheck.NewChecker(db, c.Discovery, c.Port, logger, c.CheckInterval, c.ParallelChecks)
+	s := service.NewService(logger, c.ServicePort)
+	go s.Start()
+
+	checker, err := servicecheck.NewChecker(db, logger, c)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,7 +47,11 @@ func main() {
 	defer checker.Stop()
 
 	server := webserver.NewServer(*c, db, logger, c.Port)
-	go server.Start()
+	go func() {
+		if err := server.Start(); err != nil {
+			log.Fatal("error starting web interface", err)
+		}
+	}()
 	defer server.Stop()
 
 	sig := make(chan os.Signal, 1)

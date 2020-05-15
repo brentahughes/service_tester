@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Port           int
+	ServicePort    int
 	Discovery      string
 	PublicIPDNS    string
 	InternalPDNS   string
@@ -23,6 +24,15 @@ func LoadEnvConfig() (*Config, error) {
 	port := 80
 	if portStr != "" {
 		port, err = strconv.Atoi(portStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	servicePortStr := os.Getenv("SERVICE_PORT")
+	servicePort := 5500
+	if servicePortStr != "" {
+		servicePort, err = strconv.Atoi(servicePortStr)
 		if err != nil {
 			return nil, err
 		}
@@ -56,6 +66,7 @@ func LoadEnvConfig() (*Config, error) {
 
 	return &Config{
 		Port:           port,
+		ServicePort:    servicePort,
 		Discovery:      discoveryURL,
 		CheckInterval:  checkInterval,
 		InternalPDNS:   internalIP,
