@@ -5,15 +5,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/asdine/storm/v3"
 	"github.com/brentahughes/service_tester/pkg/config"
 	"github.com/brentahughes/service_tester/pkg/models"
+	"github.com/dgraph-io/badger"
 	"github.com/digineo/go-ping"
 	"github.com/panjf2000/ants"
 )
 
 type Checker struct {
-	db            *storm.DB
+	db            *badger.DB
 	servicePort   int
 	serviceName   string
 	checkInterval time.Duration
@@ -24,7 +24,7 @@ type Checker struct {
 }
 
 func NewChecker(
-	db *storm.DB,
+	db *badger.DB,
 	logger *models.Logger,
 	conf *config.Config,
 ) (*Checker, error) {
@@ -67,13 +67,12 @@ func (c *Checker) Stop() {
 	c.logger.Infof("Shutting down checker")
 	c.httpClient.CloseIdleConnections()
 	c.pinger.Close()
-	c.pool.Release()
 }
 
 func (c *Checker) runCheck() {
 	c.discoverNewHosts()
 
-	hosts, err := models.GetRecentHosts(c.db)
+	hosts, err := models.GetHosts(c.db)
 	if err != nil {
 		c.logger.Errorf("error getting recent hosts: %v", err)
 		return
@@ -93,7 +92,7 @@ func (c *Checker) discoverNewHosts() {
 	for _, ip := range ips {
 		host, err := models.GetHostByIP(c.db, ip)
 		if err != nil {
-			if err != storm.ErrNotFound {
+			if err != badger.ErrKeyNotFound {
 				c.logger.Errorf("error looking up host by ip (%s) %v", ip, err)
 				continue
 			}

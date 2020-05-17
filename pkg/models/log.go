@@ -1,11 +1,12 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
-	"github.com/asdine/storm/v3"
+	"github.com/dgraph-io/badger"
 )
 
 const (
@@ -20,24 +21,20 @@ var logger *Logger
 type LogType string
 
 type Logger struct {
-	db *storm.DB
-	ch chan Log
+	db *badger.DB
 }
 
 type Log struct {
-	ID        int     `storm:"id,increment"`
-	LogType   LogType `storm:"index"`
+	ID        string
+	LogType   LogType
 	Message   string
-	CreatedAt time.Time `storm:"index"`
+	CreatedAt time.Time
 }
 
-func NewLogger(db *storm.DB) *Logger {
+func NewLogger(db *badger.DB) *Logger {
 	l := &Logger{
 		db: db,
-		ch: make(chan Log, 0),
 	}
-
-	go l.logSaver()
 
 	logger = l
 	return l
@@ -66,52 +63,54 @@ func (l *Logger) storeLog(logType LogType, msg string) {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	if err := l.db.From("log").Save(newLog); err != nil {
+	err := l.db.Update(func(txn *badger.Txn) error {
+		newLog.ID = getID()
+
+		jsonLog, _ := json.Marshal(newLog)
+		return txn.Set([]byte("logs."+newLog.ID), jsonLog)
+	})
+	if err != nil {
 		log.Print("Error adding log to database: ", err)
 	}
 
 	fmt.Println(newLog.String())
 }
 
-func (l *Logger) logSaver() {
-	t := time.NewTicker(time.Minute)
-
-	var logs []Log
-	for {
-		select {
-		case newLog := <-l.ch:
-			logs = append(logs, newLog)
-
-			if len(logs) > 100 {
-				l.saveLogs(logs)
-				logs = make([]Log, 0)
-			}
-		case <-t.C:
-			if len(logs) > 0 {
-				l.saveLogs(logs)
-				logs = make([]Log, 0)
-			}
-		}
-	}
-
-}
-
-func (l *Logger) saveLogs(logs []Log) {
-	n := l.db.WithBatch(true).From("log")
-
-	for _, lo := range logs {
-		if err := n.Save(lo); err != nil {
-			log.Print("Error adding log to database: ", err)
-		}
-	}
-}
-
 func (l *Log) String() string {
 	return fmt.Sprintf("%s %-7s %s", l.CreatedAt.Format("2006-01-02 15:04:05.000"), "["+l.LogType+"]", l.Message)
 }
 
-func GetLogs(db *storm.DB, limit int) ([]Log, error) {
+func GetLogs(db *badger.DB, limit int) ([]Log, error) {
 	var logs []Log
-	err := db.From("log").AllByIndex("CreatedAt", &logs, storm.Limit(limit), storm.Reverse())
+
+	err := db.View(func(txn *badger.Txn) error {
+		opts := badger.IteratorOptions{
+			PrefetchValues: true,
+			PrefetchSize:   limit,
+			Reverse:        true,
+			AllVersions:    false,
+			Prefix:         []byte("logs."),
+		}
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek([]byte("logs.")); it.ValidForPrefix([]byte("logs.")); it.Next() {
+			item := it.Item()
+
+			var log Log
+			err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &log)
+			})
+			if err != nil {
+				return err
+			}
+
+			logs = append(logs, log)
+			if len(logs) >= limit {
+				return nil
+			}
+		}
+		return nil
+	})
 	return logs, err
 }
