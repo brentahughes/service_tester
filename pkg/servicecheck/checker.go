@@ -87,9 +87,20 @@ func (c *Checker) discoverNewHosts() {
 	ips, err := c.getHostnamesFromSRV()
 	if err != nil {
 		c.logger.Errorf("error checking discovery endpoint (%s) %v", c.serviceName, err)
+		return
+	}
+
+	currentHost, err := models.GetCurrentHost(c.db)
+	if err != nil {
+		c.logger.Errorf("error getting current host %v", err)
+		return
 	}
 
 	for _, ip := range ips {
+		if currentHost.PublicIP == ip || currentHost.InternalIP == ip {
+			continue
+		}
+
 		host, err := models.GetHostByIP(c.db, ip)
 		if err != nil {
 			if err != badger.ErrKeyNotFound {
