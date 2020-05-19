@@ -15,5 +15,6 @@
 # vendor/
 
 node_modules
+frontend/build
 .DS_Store
 .db

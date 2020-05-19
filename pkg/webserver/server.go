@@ -35,16 +35,15 @@ func NewServer(config config.Config, db *badger.DB, logger *models.Logger, port 
 func (s *Server) Start() error {
 	gin.SetMode(gin.ReleaseMode)
 
-	r := gin.New()
-	r.Use(gin.Recovery())
+	r := gin.Default()
+	r.Use(gin.Recovery(), gin.Logger())
 
-	// Frontend
-	r.Use(static.Serve("/resources", static.LocalFile("./resources", true)))
-	r.GET("/", func(c *gin.Context) { c.Redirect(http.StatusPermanentRedirect, "/dashboard") })
-
-	dashboard := r.Group("/dashboard")
-	dashboard.GET("/", s.dashboard)
-	dashboard.GET("/hosts/:id", s.hostDetails)
+	// React Frontend
+	r.Use(static.Serve("/", static.LocalFile("./frontend/build", true)))
+	// This is a hack to make the react frontend is used for any route that wasn't defined elsewhere
+	r.NoRoute(func(c *gin.Context) {
+		http.ServeFile(c.Writer, c.Request, "./frontend/build/index.html")
+	})
 
 	// API Endpoints
 	api := r.Group("/api")
