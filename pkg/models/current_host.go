@@ -1,21 +1,31 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/asdine/storm/v3"
-	"github.com/asdine/storm/v3/q"
 	"github.com/brentahughes/service_tester/pkg/config"
+	"github.com/dgraph-io/badger"
 	servicehost "github.com/shirou/gopsutil/host"
 )
 
-func GetCurrentHost(db *storm.DB) (*Host, error) {
+func GetCurrentHost(db *badger.DB) (*Host, error) {
 	var host Host
-	if err := db.From("host").Select(q.Eq("CurrentHost", true)).First(&host); err != nil {
+	err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(hostsPrefix + currentHostID))
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &host)
+		})
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -32,27 +42,28 @@ func GetCurrentHost(db *storm.DB) (*Host, error) {
 	host.ServiceUptime = time.Since(host.ServiceLastStart).Truncate(time.Second)
 	host.HostUptime = uptimeDur
 
-	hosts, err := GetRecentHosts(db)
-	if err != nil && err != storm.ErrNotFound {
+	hosts, err := GetHosts(db)
+	if err != nil {
 		return nil, err
 	}
 
-	host.DiscoveredHosts = make([]string, 0)
-	for _, h := range hosts {
-		host.DiscoveredHosts = append(host.DiscoveredHosts, h.Hostname)
+	host.DiscoveredHosts = make([]string, len(hosts))
+	for i, h := range hosts {
+		host.DiscoveredHosts[i] = h.Hostname
 	}
 
 	return &host, nil
 }
 
-func UpdateCurrentHost(db *storm.DB, conf *config.Config) error {
+func UpdateCurrentHost(db *badger.DB, conf *config.Config) error {
 	host, err := GetCurrentHost(db)
-	if err != nil && err != storm.ErrNotFound {
+	if err != nil && err != badger.ErrKeyNotFound {
 		return err
 	}
 
 	if host == nil {
 		host = &Host{
+			ID:                currentHostID,
 			CurrentHost:       true,
 			ServiceRestarts:   -1,
 			ServiceFirstStart: time.Now().UTC(),
@@ -73,9 +84,12 @@ func UpdateCurrentHost(db *storm.DB, conf *config.Config) error {
 	host.InternalIP = internal
 	host.PublicIP = public
 	host.ServiceLastStart = time.Now().UTC()
-	host.Port = conf.ServicePort
 	host.ServiceRestarts++
-	return db.From("host").Save(host)
+
+	return db.Update(func(txn *badger.Txn) error {
+		hostJson, _ := json.Marshal(host)
+		return txn.Set([]byte(hostsPrefix+host.ID), hostJson)
+	})
 }
 
 func getLocalHostIPs(conf *config.Config) (string, string, error) {

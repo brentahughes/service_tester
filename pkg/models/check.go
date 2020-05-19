@@ -1,11 +1,12 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/asdine/storm/q"
-	"github.com/asdine/storm/v3"
+	"github.com/dgraph-io/badger"
 )
 
 const (
@@ -28,15 +29,16 @@ type CheckType string
 type Status string
 
 type Check struct {
-	ID                int `storm:"id,increment"`
-	Status            Status
-	ResponseTime      time.Duration
-	StatusCode        int
-	ResponseBody      string
-	CheckErrorMessage string
-	Network           Network   `storm:"index"`
-	CheckType         CheckType `storm:"index"`
-	CheckedAt         time.Time `storm:"index"`
+	ID                string        `json:"id"`
+	HostID            string        `json:"hostId"`
+	Status            Status        `json:"status"`
+	ResponseTime      time.Duration `json:"responseTime"`
+	StatusCode        int           `json:"statusCode"`
+	ResponseBody      string        `json:"responseBody"`
+	CheckErrorMessage string        `json:"checkErrorMessage"`
+	Network           Network       `json:"network"`
+	CheckType         CheckType     `json:"checkType"`
+	CheckedAt         time.Time     `json:"checkedAt"`
 }
 
 type Checks []Check
@@ -61,85 +63,104 @@ func (c Checks) getByNetwork(n Network) Checks {
 	return checks
 }
 
-func (h *Host) getCheckDB(db *storm.DB) storm.Node {
-	return db.From(fmt.Sprintf("host.%d.check", h.ID))
-}
-
-func (h *Host) AddCheck(db *storm.DB, check *Check) error {
+func (h *Host) AddCheck(db *badger.DB, check *Check) error {
+	check.ID = getID()
+	check.HostID = h.ID
 	check.CheckedAt = time.Now().UTC()
-	if err := h.getCheckDB(db).Save(check); err != nil {
-		return err
-	}
-
-	// Check If more than 100 checks exist and delete older ones
-	count, err := h.getCheckDB(db).
-		Select(q.Eq("CheckType", check.CheckType), q.Eq("Network", check.Network)).
-		Count(&Check{})
-	if err != nil {
-		return err
-	}
-
-	if count > checkLimit {
-		query := h.getCheckDB(db).
-			Select(q.Eq("CheckType", check.CheckType), q.Eq("Network", check.Network)).
-			OrderBy("CheckedAt").
-			Limit(count - checkLimit)
-		if err := query.Delete(&Check{}); err != nil && err != storm.ErrNotFound {
+	return db.Update(func(txn *badger.Txn) error {
+		checkJSON, _ := json.Marshal(check)
+		key := fmt.Sprintf("checks.%s.%s.%s.%d", h.ID, check.Network, check.CheckType, check.CheckedAt.Unix())
+		entry := badger.NewEntry([]byte(key), checkJSON).WithTTL(3 * time.Hour)
+		if err := txn.SetEntry(entry); err != nil {
 			return err
 		}
-	}
 
-	return nil
+		// Add the latest
+		key = fmt.Sprintf("checks.%s.latest.%s.%s", h.ID, check.Network, check.CheckType)
+		entry = badger.NewEntry([]byte(key), checkJSON).WithTTL(3 * time.Hour)
+		return txn.SetEntry(entry)
+	})
 }
 
-func (h *Host) addChecks(db *storm.DB) {
-	var checks Checks
-	err := h.getCheckDB(db).
-		Select(q.Gte("CheckedAt", time.Now().Add(-12*time.Hour))).
-		Reverse().
-		OrderBy("CheckedAt").
-		Find(&checks)
-	if err != nil {
-		logger.Errorf("error getting internal checks %v", err)
-		return
-	}
+func (h *Host) addChecks(db *badger.DB) error {
+	h.Checks = &ServiceChecks{}
+	return db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.IteratorOptions{})
+		defer it.Close()
 
-	h.Checks.Internal.HTTP = checks.getByType(CheckHTTP).getByNetwork(NetworkInternal)
-	h.Checks.Internal.TCP = checks.getByType(CheckTCP).getByNetwork(NetworkInternal)
-	h.Checks.Internal.UDP = checks.getByType(CheckUDP).getByNetwork(NetworkInternal)
-	h.Checks.Internal.ICMP = checks.getByType(CheckICMP).getByNetwork(NetworkInternal)
-	h.Checks.Public.HTTP = checks.getByType(CheckHTTP).getByNetwork(NetworkPublic)
-	h.Checks.Public.TCP = checks.getByType(CheckTCP).getByNetwork(NetworkPublic)
-	h.Checks.Public.UDP = checks.getByType(CheckUDP).getByNetwork(NetworkPublic)
-	h.Checks.Public.ICMP = checks.getByType(CheckICMP).getByNetwork(NetworkPublic)
+		for it.Seek([]byte("checks." + h.ID + ".")); it.ValidForPrefix([]byte("checks." + h.ID + ".")); it.Next() {
+			item := it.Item()
+
+			var check Check
+			err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &check)
+			})
+			if err != nil {
+				return err
+			}
+
+			keyParts := strings.Split(string(item.Key()), ".")
+			switch fmt.Sprintf("%s.%s", keyParts[2], keyParts[3]) {
+			case "internal.HTTP":
+				h.Checks.Internal.HTTP = append(h.Checks.Internal.HTTP, check)
+			case "internal.ICMP":
+				h.Checks.Internal.ICMP = append(h.Checks.Internal.ICMP, check)
+			case "internal.TCP":
+				h.Checks.Internal.TCP = append(h.Checks.Internal.TCP, check)
+			case "internal.UDP":
+				h.Checks.Internal.UDP = append(h.Checks.Internal.UDP, check)
+			case "public.HTTP":
+				h.Checks.Public.HTTP = append(h.Checks.Public.HTTP, check)
+			case "public.ICMP":
+				h.Checks.Public.ICMP = append(h.Checks.Public.ICMP, check)
+			case "public.TCP":
+				h.Checks.Public.TCP = append(h.Checks.Public.TCP, check)
+			case "public.UDP":
+				h.Checks.Public.UDP = append(h.Checks.Public.UDP, check)
+			}
+		}
+		return nil
+	})
 }
 
-func (h *Host) addLastHTTPChecks(db *storm.DB) {
-	var check Check
+func (h *Host) addLatestStatuses(db *badger.DB) error {
+	h.LatestStatuses = &LatestStatuses{}
+	return db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
 
-	err := h.getCheckDB(db).
-		Select(q.Eq("Network", NetworkInternal), q.Eq("CheckType", CheckHTTP)).
-		OrderBy("CheckedAt").
-		Reverse().
-		First(&check)
-	if err == nil {
-		h.LatestHTTPChecks.Internal = check
-	} else {
-		logger.Errorf("error getting last http check %v", err)
-	}
+		prefix := []byte("checks." + h.ID + ".latest.")
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
 
-	err = h.getCheckDB(db).
-		Select(q.Eq("Network", NetworkPublic), q.Eq("CheckType", CheckHTTP)).
-		OrderBy("CheckedAt").
-		Reverse().
-		First(&check)
-	if err == nil {
-		h.LatestHTTPChecks.Public = check
-	} else {
-		logger.Errorf("error getting last http check %v", err)
-	}
-}
+			var check Check
+			err := item.Value(func(val []byte) error {
+				return json.Unmarshal(val, &check)
+			})
+			if err != nil {
+				return err
+			}
 
-func (h *Host) getHostCheckByNetwork(db *storm.DB, network Network) storm.Query {
-	return h.getCheckDB(db).Select(q.Eq("Network", network)).OrderBy("CheckedAt").Reverse()
+			keyParts := strings.Split(string(item.Key()), ".")
+			switch fmt.Sprintf("%s.%s", keyParts[3], keyParts[4]) {
+			case "internal.HTTP":
+				h.LatestStatuses.Internal.HTTP = check.Status
+			case "internal.ICMP":
+				h.LatestStatuses.Internal.ICMP = check.Status
+			case "internal.TCP":
+				h.LatestStatuses.Internal.TCP = check.Status
+			case "internal.UDP":
+				h.LatestStatuses.Internal.UDP = check.Status
+			case "public.HTTP":
+				h.LatestStatuses.Public.HTTP = check.Status
+			case "public.ICMP":
+				h.LatestStatuses.Public.ICMP = check.Status
+			case "public.TCP":
+				h.LatestStatuses.Public.TCP = check.Status
+			case "public.UDP":
+				h.LatestStatuses.Public.UDP = check.Status
+			}
+		}
+		return nil
+	})
 }

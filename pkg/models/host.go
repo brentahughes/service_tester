@@ -1,130 +1,242 @@
 package models
 
 import (
+	"encoding/json"
+	"sort"
+	"strings"
 	"time"
 
-	"github.com/asdine/storm/q"
-	"github.com/asdine/storm/v3"
+	"github.com/dgraph-io/badger"
+)
+
+const (
+	hostsPrefix    = "hosts.id."
+	hostnamePrefix = "hosts.hostname."
+	ipPrefix       = "hosts.ip."
 )
 
 type Host struct {
-	ID                int       `storm:"id,increment"`
-	CurrentHost       bool      `storm:"index"`
-	Hostname          string    `storm:"unique"`
-	ServiceRestarts   int       `json:"serviceRestarts"`
-	ServiceFirstStart time.Time `json:"serviceFirstStart"`
-	ServiceLastStart  time.Time `json:"serviceLastStart"`
-	InternalIP        string    `storm:"unique"`
-	PublicIP          string    `storm:"unique"`
-	Port              int
-	ServiceUptime     time.Duration `json:"serviceUptime"`
-	HostUptime        time.Duration `json:"hostUptime"`
-	DiscoveredHosts   []string      `json:"discoveredHosts"`
-	FirstSeenAt       time.Time
-	LastSeenAt        time.Time `json:"index"`
-
-	LatestHTTPChecks LatestHTTPChecks `json:"-"`
-	Checks           ServiceChecks    `json:"-"`
+	ID                string          `json:"id" badgerhold:"key"`
+	CurrentHost       bool            `json:"-"`
+	Hostname          string          `json:"hostname" badgerhold:"unique"`
+	ServiceRestarts   int             `json:"serviceRestarts,omitempty"`
+	ServiceFirstStart time.Time       `json:"serviceFirstStart"`
+	ServiceLastStart  time.Time       `json:"serviceLastStart"`
+	InternalIP        string          `json:"internalIp" badgerhold:"unique"`
+	PublicIP          string          `json:"publicIp" badgerhold:"unique"`
+	ServiceUptime     time.Duration   `json:"serviceUptime,omitempty"`
+	HostUptime        time.Duration   `json:"hostUptime,omitempty"`
+	DiscoveredHosts   []string        `json:"discoveredHosts,omitempty"`
+	FirstSeenAt       time.Time       `json:"firstSeenAt"`
+	LastSeenAt        time.Time       `json:"lastSeenAt" badgerhold:"index"`
+	LatestStatuses    *LatestStatuses `json:"latestStatus,omitempty"`
+	Checks            *ServiceChecks  `json:"checks,omitempty"`
 }
 
-type LatestHTTPChecks struct {
-	Internal Check
-	Public   Check
+type LatestStatuses struct {
+	Internal Statuses `json:"internal"`
+	Public   Statuses `json:"public"`
 }
 
 type ServiceChecks struct {
-	Internal CheckTypes
-	Public   CheckTypes
+	Internal CheckTypes `json:"internal"`
+	Public   CheckTypes `json:"public"`
 }
 
 type CheckTypes struct {
-	HTTP []Check
-	TCP  []Check
-	UDP  []Check
-	ICMP []Check
+	HTTP []Check `json:"http"`
+	TCP  []Check `json:"tcp"`
+	UDP  []Check `json:"udp"`
+	ICMP []Check `json:"icmp"`
 }
 
-func GetHostByHostname(db *storm.DB, hostname string) (*Host, error) {
+type Statuses struct {
+	HTTP Status `json:"http"`
+	TCP  Status `json:"tcp"`
+	UDP  Status `json:"udp"`
+	ICMP Status `json:"icmp"`
+}
+
+func GetHostByHostname(db *badger.DB, hostname string) (*Host, error) {
 	var host Host
-	if err := db.From("host").One("Hostname", hostname, &host); err != nil {
+	err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(hostnamePrefix + hostname))
+		if err != nil {
+			return err
+		}
+
+		var id string
+		item.Value(func(val []byte) error {
+			id = string(val)
+			return nil
+		})
+
+		item, err = txn.Get([]byte(hostsPrefix + id))
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &host)
+		})
+	})
+	if err != nil {
 		return nil, err
 	}
 
 	return &host, nil
 }
 
-func GetHostByID(db *storm.DB, id int) (*Host, error) {
+func GetHostByID(db *badger.DB, id string) (*Host, error) {
 	var host Host
-	if err := db.From("host").One("ID", id, &host); err != nil {
+	err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(hostsPrefix + id))
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &host)
+		})
+	})
+	if err != nil {
 		return nil, err
 	}
 
-	h := &host
-	h.addChecks(db)
-
-	return h, nil
-}
-
-func GetHostByIP(db *storm.DB, ip string) (*Host, error) {
-	var host Host
-	if err := db.From("host").Select(q.Or(q.Eq("InternalIP", ip), q.Eq("PublicIP", ip))).First(&host); err != nil {
+	if err := host.addLatestStatuses(db); err != nil {
 		return nil, err
 	}
 
-	h := &host
-	h.addChecks(db)
+	if err := host.addChecks(db); err != nil {
+		return nil, err
+	}
 
-	return h, nil
+	return &host, nil
 }
 
-func GetRecentHostsWithChecks(db *storm.DB) ([]Host, error) {
-	var hosts []Host
-	if err := db.From("host").Select(
-		q.Eq("CurrentHost", false),
-		q.Gte("LastSeenAt", time.Now().UTC().Add(-1*time.Minute)),
-	).OrderBy("Hostname").Find(&hosts); err != nil && err != storm.ErrNotFound {
+func GetHostByIP(db *badger.DB, ip string) (*Host, error) {
+	var host Host
+	err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(ipPrefix + ip))
+		if err != nil {
+			return err
+		}
+
+		var id string
+		item.Value(func(val []byte) error {
+			id = string(val)
+			return nil
+		})
+
+		item, err = txn.Get([]byte(hostsPrefix + id))
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &host)
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &host, nil
+}
+
+func GetHostsWithStatuses(db *badger.DB) ([]Host, error) {
+	hosts, err := GetHosts(db)
+	if err != nil {
 		return nil, err
 	}
 
 	for i, host := range hosts {
-		host.addLastHTTPChecks(db)
+		if err := host.addLatestStatuses(db); err != nil {
+			return nil, err
+		}
 		hosts[i] = host
 	}
 
 	return hosts, nil
 }
 
-func GetRecentHosts(db *storm.DB) ([]Host, error) {
+func GetHosts(db *badger.DB) ([]Host, error) {
 	var hosts []Host
-	if err := db.From("host").Select(q.Eq("CurrentHost", false)).OrderBy("Hostname").Find(&hosts); err != nil {
+	err := db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+
+		for it.Seek([]byte(hostsPrefix)); it.ValidForPrefix([]byte(hostsPrefix)); it.Next() {
+			var host Host
+
+			item := it.Item()
+
+			if strings.HasSuffix(string(item.Key()), currentHostID) {
+				continue
+			}
+
+			err := item.Value(func(val []byte) error {
+				if err := json.Unmarshal(val, &host); err != nil {
+					return err
+				}
+
+				hosts = append(hosts, host)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
-	var recents []Host
-	for _, host := range hosts {
-		if time.Since(host.LastSeenAt) <= time.Minute {
-			recents = append(recents, host)
-		}
-	}
+	sort.Slice(hosts, func(a, b int) bool {
+		return sort.StringsAreSorted([]string{hosts[a].Hostname, hosts[b].Hostname})
+	})
 
-	return recents, nil
+	return hosts, nil
 }
 
-func (h *Host) Save(db *storm.DB) error {
+func (h *Host) Save(db *badger.DB) error {
 	h.LastSeenAt = time.Now().UTC()
 	if h.FirstSeenAt.IsZero() {
 		h.FirstSeenAt = time.Now().UTC()
 	}
 
-	return db.From("host").Save(h)
-}
-
-func (h *Host) Delete(db *storm.DB) error {
-	// Delete all the checks for the host
-	if err := db.From("host").Select(q.Eq("HostID", h.ID)).Delete(&Check{}); err != nil {
-		return err
+	if h.ID == "" {
+		h.ID = getID()
+		if h.CurrentHost {
+			h.ID = currentHostID
+		}
 	}
+	h.Checks = nil
+	h.LatestStatuses = nil
 
-	// Delete the host
-	return db.From("host").DeleteStruct(h)
+	return db.Update(func(txn *badger.Txn) error {
+		jsonHost, _ := json.Marshal(h)
+		if err := txn.Set([]byte(hostsPrefix+h.ID), jsonHost); err != nil {
+			return err
+		}
+
+		if err := txn.Set([]byte(hostnamePrefix+h.Hostname), []byte(h.ID)); err != nil {
+			return err
+		}
+
+		if h.PublicIP != "" {
+			if err := txn.Set([]byte(ipPrefix+h.PublicIP), []byte(h.ID)); err != nil {
+				return err
+			}
+		}
+
+		if h.InternalIP != "" {
+			if err := txn.Set([]byte(ipPrefix+h.InternalIP), []byte(h.ID)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

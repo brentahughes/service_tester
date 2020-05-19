@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"regexp"
 	"time"
 
 	"github.com/brentahughes/service_tester/pkg/models"
@@ -264,6 +265,11 @@ func (c *Checker) checkHealth(host string) (checkResp healthResponse) {
 		return
 	}
 	checkResp.responseBody = string(body)
+
+	// Backwards compatibility to handle remote service still using an int for the ID
+	// Change the ID in the response to a string value
+	r := regexp.MustCompile(`"ID":(\d+),`)
+	body = r.ReplaceAll(body, []byte(`"ID":"${1}",`))
 
 	if err := json.Unmarshal(body, &checkResp); err != nil {
 		checkResp.errorMessage = err
