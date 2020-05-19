@@ -2,6 +2,9 @@
 Service to test icmp, tcp, and udp traffic across multiple containers world wide. Primarily used for testing the StackPath Edge Compute platform.
 
 
+![Dashboard](https://raw.githubusercontent.com/brentahughes/service_tester/master/screenshots/dashboard.png)
+![Check Details](https://raw.githubusercontent.com/brentahughes/service_tester/master/screenshots/check_details.png)
+
 ## How It Works
 Every few seconds the service will do a dns query to a discovery dns to find all other containers that are a part of the test as defined by the envvar DISCOVERY_NAME. For each container it finds it will begin a periodic health, icmp, tcp, and udp check on every host it's found. This creates of every container talking to every other container constantly.
 
