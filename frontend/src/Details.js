@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Container from 'react-bootstrap/Container';
 import Row from 'react-bootstrap/Row';
+import Col from 'react-bootstrap/Col';
+import ButtonGroup from 'react-bootstrap/ButtonGroup';
+import Button from 'react-bootstrap/Button';
 import { Line } from 'react-chartjs-2';
 import moment from 'moment';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -11,7 +14,7 @@ function Details(props) {
     const [isLoaded, setIsLoaded] = useState(false);
     const [host, setHost] = useState({});
 
-    useEffect(() => {
+    let dataFetch = () => {
         fetch("/api/hosts/" + props.hostId)
             .then(res => res.json())
             .then(
@@ -24,6 +27,17 @@ function Details(props) {
                     setError(error);
                 }
             )
+    }
+
+    useEffect(() => {
+        dataFetch();
+        let interval = setInterval(() => {
+            dataFetch();
+        }, 10000);
+
+        return () => {
+            clearInterval(interval);
+        }
     }, [props.hostId])
 
     if (error) {
@@ -36,13 +50,59 @@ function Details(props) {
 
     return (
         <Container fluid>
+            <HostDetails host={host} />
+            <br /><br />
+
             <Row>
-                <Graph checksPublic={host.checks.public.http} checksInternal={host.checks.internal.http} type="http"/>
-                <Graph checksPublic={host.checks.public.icmp} checksInternal={host.checks.internal.icmp} type="icmp"/>
-                <Graph checksPublic={host.checks.public.tcp} checksInternal={host.checks.internal.tcp} type="tcp"/>
-                <Graph checksPublic={host.checks.public.udp} checksInternal={host.checks.internal.udp} type="udp"/>
+                <Graph checksPublic={host.checks.public.http} checksInternal={host.checks.internal.http} type="http" />
+                <Graph checksPublic={host.checks.public.icmp} checksInternal={host.checks.internal.icmp} type="icmp" />
+                <Graph checksPublic={host.checks.public.tcp} checksInternal={host.checks.internal.tcp} type="tcp" />
+                <Graph checksPublic={host.checks.public.udp} checksInternal={host.checks.internal.udp} type="udp" />
             </Row>
         </Container>
+    );
+}
+
+function OverviewHostStatus(props) {
+    if (props.status === 'success') {
+        return <Button size="sm" variant="success" className="status-btn" disabled>{props.name}</Button>;
+    }
+    return <Button size="sm" variant="danger" className="status-btn" disabled>{props.name}</Button>;
+}
+
+
+function HostDetails(props) {
+    return (
+        <Row>
+            <Container fluid>
+                <Row>
+                    <Col lg={12} className="text-center"><h3>{props.host.hostname}</h3></Col>
+                </Row>
+                <br />
+                <Row>
+                    <Col lg={6} className="text-center">
+                        {props.host.publicIp}
+                        <br />
+                        <ButtonGroup>
+                            <OverviewHostStatus name='HTTP' status={props.host.latestStatus.public.http} />
+                            <OverviewHostStatus name='ICMP' status={props.host.latestStatus.public.icmp} />
+                            <OverviewHostStatus name='TCP' status={props.host.latestStatus.public.tcp} />
+                            <OverviewHostStatus name='UDP' status={props.host.latestStatus.public.udp} />
+                        </ButtonGroup>
+                    </Col>
+                    <Col lg={6} className="text-center">
+                        {props.host.internalIp}
+                        <br />
+                        <ButtonGroup>
+                            <OverviewHostStatus name='HTTP' status={props.host.latestStatus.internal.http} />
+                            <OverviewHostStatus name='ICMP' status={props.host.latestStatus.internal.icmp} />
+                            <OverviewHostStatus name='TCP' status={props.host.latestStatus.internal.tcp} />
+                            <OverviewHostStatus name='UDP' status={props.host.latestStatus.internal.udp} />
+                        </ButtonGroup>
+                    </Col>
+                </Row>
+            </Container>
+        </Row>
     );
 }
 
@@ -60,7 +120,7 @@ function Graph(props) {
     props.checksInternal.forEach(item => {
         internalData.push({
             t: moment.unix(parseInt(moment(item.checkedAt).format("X"))),
-            y: item.status === "success" ? parseInt(item.responseTime / 1000/ 1000): 0
+            y: item.status === "success" ? parseInt(item.responseTime / 1000 / 1000) : 0
         });
     });
 
@@ -118,7 +178,7 @@ function Graph(props) {
     };
 
     return (
-            <div className="graph"><Line data={data} options={options} /></div>
+        <div className="graph"><Line data={data} options={options} /></div>
     );
 }
 

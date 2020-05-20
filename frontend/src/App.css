@@ -36,3 +36,32 @@
     transform: rotate(360deg);
   }
 }
+
+h1, h2, h3, h4, h5 {
+  color: #fff;
+}
+
+body {
+  margin: 0;
+  background-color: #454d54;
+}
+
+.main-container {
+  margin-top: 10px;
+  background-color: #343a40;
+  padding: 20px;
+  width: 90%;
+}
+
+.error {
+  color: #ff7777;
+}
+
+.success {
+  color: #77ff77;
+}
+
+.dropdown-item:hover {
+  background-color: #242a30;
+  color: #fff;
+}

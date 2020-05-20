@@ -1,7 +1,13 @@
-import React, {useState, useEffect} from 'react';
-import {BrowserRouter, Route, Switch, useParams} from "react-router-dom";
-import Layout from './Layout';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Route, Switch, useParams } from "react-router-dom";
+import Navbar from 'react-bootstrap/Navbar';
+import Nav from 'react-bootstrap/Nav';
+import NavDropdown from 'react-bootstrap/NavDropdown';
+import Container from 'react-bootstrap/Container';
+import { Link } from 'react-router-dom';
+import Overview from './Overview';
 import './App.css';
+import Details from './Details';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 function App() {
@@ -10,7 +16,7 @@ function App() {
   const [currentHost, setCurrentHost] = useState({});
   const [hosts, setHosts] = useState([]);
 
-  useEffect(() => {
+  let dataFetch = () => {
     fetch("/api/health")
       .then(res => res.json())
       .then(
@@ -22,7 +28,8 @@ function App() {
           setIsLoaded(true);
           setError(error);
         }
-      )
+    )
+
     fetch("/api/hosts")
       .then(res => res.json())
       .then(
@@ -33,6 +40,17 @@ function App() {
           setError(error);
         }
       )
+  }
+
+  useEffect(() => {
+    dataFetch();
+    let interval = setInterval(() => {
+      dataFetch();
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+    }
   }, [])
 
   if (error) {
@@ -45,30 +63,59 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Switch>
-        <Route path="/hosts/:hostId">
-          <HostDetails currentHost={currentHost} hosts={hosts} />
-        </Route>
+      <Container fluid>
+        <Navbar bg="dark" expand="md" variant="dark">
+          <Navbar.Toggle aria-controls="navbarSupportedContent" />
+          <Navbar.Collapse id="navbarSupportedContent">
+            <Nav className="mr-auto">
+              <NavDropdown id="navbarDropdown" title={currentHost.hostname} active>
+                {hosts.map((item, key) => {
+                  return (
+                    <NavDropdown.Item
+                      key={key}
+                      href={"http://" + item.publicIp}
+                    >
+                      {item.hostname}
+                    </NavDropdown.Item>
+                  );
+                })}
+              </NavDropdown>
 
-        <Route exact path="/">
-          <Layout currentHost={currentHost} hosts={hosts} />
-        </Route>
+              <Link className="nav-link" to="/">Home</Link>
+            </Nav>
+          </Navbar.Collapse>
+        </Navbar>
 
-        <Route>
-          <PageNotFound currentHost={currentHost} hosts={hosts} />
-        </Route>
-      </Switch>
+        <Container fluid className="main-container">
+          <Container fluid className="content-container">
+
+            <Switch>
+              <Route path="/hosts/:hostId">
+                <HostDetails currentHost={currentHost} hosts={hosts} />
+              </Route>
+
+              <Route exact path="/">
+                <Overview currentHost={currentHost} hosts={hosts} />
+              </Route>
+
+              <Route>
+                <PageNotFound />
+              </Route>
+            </Switch>
+          </Container>
+        </Container>
+      </Container>
     </BrowserRouter>
   );
 }
 
-function HostDetails(props) {
+function HostDetails() {
   let { hostId } = useParams();
-  return <Layout currentHost={props.currentHost} hosts={props.hosts} hostId={hostId} />;
+  return <Details hostId={hostId} />;
 }
 
-function PageNotFound(props) {
-  return <Layout currentHost={props.currentHost} hosts={props.hosts} pageNotFound />;
+function PageNotFound() {
+  return <div className="text-center"><h3>Page Not Found</h3></div>;
 }
 
 export default App;

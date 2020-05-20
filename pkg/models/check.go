@@ -10,6 +10,8 @@ import (
 )
 
 const (
+	checkTTL = 1 * time.Hour
+
 	checkLimit = 100
 
 	StatusSuccess Status = "success"
@@ -70,15 +72,14 @@ func (h *Host) AddCheck(db *badger.DB, check *Check) error {
 	return db.Update(func(txn *badger.Txn) error {
 		checkJSON, _ := json.Marshal(check)
 		key := fmt.Sprintf("checks.%s.%s.%s.%d", h.ID, check.Network, check.CheckType, check.CheckedAt.Unix())
-		entry := badger.NewEntry([]byte(key), checkJSON).WithTTL(3 * time.Hour)
+		entry := badger.NewEntry([]byte(key), checkJSON).WithTTL(checkTTL)
 		if err := txn.SetEntry(entry); err != nil {
 			return err
 		}
 
 		// Add the latest
 		key = fmt.Sprintf("checks.%s.latest.%s.%s", h.ID, check.Network, check.CheckType)
-		entry = badger.NewEntry([]byte(key), checkJSON).WithTTL(3 * time.Hour)
-		return txn.SetEntry(entry)
+		return txn.Set([]byte(key), checkJSON)
 	})
 }
 
