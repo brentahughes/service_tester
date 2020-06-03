@@ -10,11 +10,11 @@ import (
 
 type udpServer struct {
 	logger *models.Logger
-	port int
+	port   int
 	server *net.UDPConn
 }
 
-func (s *udpServer) run(){
+func (s *udpServer) run() {
 	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", s.port))
 	if err != nil {
 		s.logger.Errorf("could not resolved UDP addr: %v", err)
@@ -49,11 +49,13 @@ func (s *udpServer) handleConnections() {
 			continue
 		}
 
-		go s.handleConnection(conn, buf[:n])
+		s.handleConnection(conn, buf[:n])
 	}
 }
 
 func (s *udpServer) handleConnection(addr *net.UDPAddr, cmd []byte) {
 	cmd = bytes.TrimSuffix(cmd, []byte("\n"))
-	s.server.WriteToUDP(marshalResponse("success", string(cmd), ""), addr)
+	if string(cmd) == "ping" {
+		s.server.WriteToUDP([]byte("pong\n"), addr)
+	}
 }

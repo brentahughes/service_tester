@@ -141,7 +141,7 @@ func (c *Checker) checkNetworkTCP(host models.Host, network models.Network) {
 	}
 
 	start := time.Now()
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, c.servicePort), checkTimeout)
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, c.cfg.ServicePort), checkTimeout)
 	if err != nil {
 		check.CheckErrorMessage = err.Error()
 		check.Status = models.StatusError
@@ -160,7 +160,7 @@ func (c *Checker) checkNetworkTCP(host models.Host, network models.Network) {
 		if len(message) > 0 {
 			var resp serviceResponse
 			if err := json.Unmarshal(message, &resp); err != nil {
-				c.logger.Errorf("error unmarshaling tcp response %s:%d %v", ip, c.servicePort, err)
+				c.logger.Errorf("error unmarshaling tcp response %s:%d %v", ip, c.cfg.ServicePort, err)
 				return
 			}
 
@@ -193,9 +193,9 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 		Network:    network,
 	}
 
-	raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, c.servicePort))
+	raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, c.cfg.ServicePort))
 	if err != nil {
-		c.logger.Errorf("error resolving udp addr %s:%d %v", ip, c.servicePort, err)
+		c.logger.Errorf("error resolving udp addr %s:%d %v", ip, c.cfg.ServicePort, err)
 		return
 	}
 
@@ -209,7 +209,7 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 		defer conn.Close()
 		conn.SetDeadline(time.Now().Add(checkTimeout))
 
-		fmt.Fprintln(conn, host.Hostname)
+		fmt.Fprintln(conn, "ping")
 		message, err := bufio.NewReader(conn).ReadBytes('\n')
 
 		if err != nil {
@@ -218,19 +218,10 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 			check.StatusCode = 500
 		}
 
-		if len(message) > 0 {
-			var resp serviceResponse
-			if err := json.Unmarshal(message, &resp); err != nil {
-				c.logger.Errorf("error un marshaling tcp response %s:%d %v", ip, c.servicePort, err)
-				return
-			}
-
-			check.ResponseBody = string(message)
-			if resp.Status == "error" {
-				check.Status = models.StatusError
-				check.StatusCode = 500
-				check.CheckErrorMessage = resp.Error
-			}
+		if len(message) > 0 && string(message) != "pong\n" {
+			check.Status = models.StatusError
+			check.StatusCode = 500
+			check.CheckErrorMessage = "wrong response"
 		}
 	}
 

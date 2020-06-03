@@ -4,12 +4,14 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
 	Port           int
 	ServicePort    int
+	Hosts          []string
 	Discovery      string
 	PublicIPDNS    string
 	InternalPDNS   string
@@ -38,8 +40,11 @@ func LoadEnvConfig() (*Config, error) {
 		}
 	}
 
+	host := os.Getenv("SERVICE_HOSTS")
+	hosts := strings.Split(host, ",")
+
 	discoveryURL := os.Getenv("DISCOVERY_NAME")
-	if discoveryURL == "" {
+	if discoveryURL == "" && len(hosts) == 0 {
 		return nil, errors.New("no DISCOVERY_NAME defined")
 	}
 
@@ -72,5 +77,6 @@ func LoadEnvConfig() (*Config, error) {
 		InternalPDNS:   internalIP,
 		PublicIPDNS:    publicIP,
 		ParallelChecks: parallelChecks,
+		Hosts:          hosts,
 	}, nil
 }

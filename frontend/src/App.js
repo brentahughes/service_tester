@@ -28,7 +28,7 @@ function App() {
           setIsLoaded(true);
           setError(error);
         }
-    )
+      )
 
     fetch("/api/hosts")
       .then(res => res.json())

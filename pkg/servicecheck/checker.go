@@ -13,14 +13,12 @@ import (
 )
 
 type Checker struct {
-	db            *badger.DB
-	servicePort   int
-	serviceName   string
-	checkInterval time.Duration
-	logger        *models.Logger
-	pool          *ants.PoolWithFunc
-	pinger        *ping.Pinger
-	httpClient    *http.Client
+	db         *badger.DB
+	cfg        *config.Config
+	logger     *models.Logger
+	pool       *ants.PoolWithFunc
+	pinger     *ping.Pinger
+	httpClient *http.Client
 }
 
 func NewChecker(
@@ -29,11 +27,9 @@ func NewChecker(
 	conf *config.Config,
 ) (*Checker, error) {
 	c := &Checker{
-		db:            db,
-		servicePort:   conf.ServicePort,
-		serviceName:   conf.Discovery,
-		checkInterval: conf.CheckInterval,
-		logger:        logger,
+		db:     db,
+		cfg:    conf,
+		logger: logger,
 		httpClient: &http.Client{
 			Timeout: checkTimeout,
 		},
@@ -57,7 +53,7 @@ func NewChecker(
 func (c *Checker) Start() {
 	c.runCheck()
 
-	tick := time.NewTicker(c.checkInterval)
+	tick := time.NewTicker(c.cfg.CheckInterval)
 	for range tick.C {
 		c.runCheck()
 	}
@@ -84,10 +80,15 @@ func (c *Checker) runCheck() {
 }
 
 func (c *Checker) discoverNewHosts() {
-	ips, err := c.getHostnamesFromSRV()
-	if err != nil {
-		c.logger.Errorf("error checking discovery endpoint (%s) %v", c.serviceName, err)
-		return
+	var err error
+
+	ips := c.cfg.Hosts
+	if c.cfg.Discovery != "" {
+		ips, err = c.discoverHosts()
+		if err != nil {
+			c.logger.Errorf("error checking discovery endpoint (%s) %v", c.cfg.Discovery, err)
+			return
+		}
 	}
 
 	currentHost, err := models.GetCurrentHost(c.db)
@@ -120,8 +121,8 @@ func (c *Checker) discoverNewHosts() {
 	}
 }
 
-func (c *Checker) getHostnamesFromSRV() ([]string, error) {
-	addrs, err := net.LookupIP(c.serviceName)
+func (c *Checker) discoverHosts() ([]string, error) {
+	addrs, err := net.LookupIP(c.cfg.Discovery)
 	if err != nil {
 		return nil, err
 	}
