@@ -16,26 +16,22 @@ const (
 )
 
 type Host struct {
-	ID                string          `json:"id" badgerhold:"key"`
-	CurrentHost       bool            `json:"-"`
-	Hostname          string          `json:"hostname" badgerhold:"unique"`
-	ServiceRestarts   int             `json:"serviceRestarts,omitempty"`
-	ServiceFirstStart time.Time       `json:"serviceFirstStart"`
-	ServiceLastStart  time.Time       `json:"serviceLastStart"`
-	InternalIP        string          `json:"internalIp" badgerhold:"unique"`
-	PublicIP          string          `json:"publicIp" badgerhold:"unique"`
-	ServiceUptime     time.Duration   `json:"serviceUptime,omitempty"`
-	HostUptime        time.Duration   `json:"hostUptime,omitempty"`
-	DiscoveredHosts   []string        `json:"discoveredHosts,omitempty"`
-	FirstSeenAt       time.Time       `json:"firstSeenAt"`
-	LastSeenAt        time.Time       `json:"lastSeenAt" badgerhold:"index"`
-	LatestStatuses    *LatestStatuses `json:"latestStatus,omitempty"`
-	Checks            *ServiceChecks  `json:"checks,omitempty"`
-}
-
-type LatestStatuses struct {
-	Internal Statuses `json:"internal"`
-	Public   Statuses `json:"public"`
+	ID                string         `json:"id" badgerhold:"key"`
+	CurrentHost       bool           `json:"-"`
+	Hostname          string         `json:"hostname" badgerhold:"unique"`
+	ServiceRestarts   int            `json:"serviceRestarts,omitempty"`
+	ServiceFirstStart time.Time      `json:"serviceFirstStart"`
+	ServiceLastStart  time.Time      `json:"serviceLastStart"`
+	InternalIP        string         `json:"internalIp" badgerhold:"unique"`
+	PublicIP          string         `json:"publicIp" badgerhold:"unique"`
+	DiscoveredIP      string         `json:"-"`
+	ServiceUptime     time.Duration  `json:"serviceUptime,omitempty"`
+	HostUptime        time.Duration  `json:"hostUptime,omitempty"`
+	FirstSeenAt       time.Time      `json:"firstSeenAt"`
+	LastSeenAt        time.Time      `json:"lastSeenAt" badgerhold:"index"`
+	LatestChecks      *ServiceChecks `json:"latestChecks,omitempty"`
+	Checks            *ServiceChecks `json:"checks,omitempty"`
+	CheckUptime       *CheckUptime   `json:"checkUptime"`
 }
 
 type ServiceChecks struct {
@@ -48,13 +44,6 @@ type CheckTypes struct {
 	TCP  []Check `json:"tcp"`
 	UDP  []Check `json:"udp"`
 	ICMP []Check `json:"icmp"`
-}
-
-type Statuses struct {
-	HTTP Status `json:"http"`
-	TCP  Status `json:"tcp"`
-	UDP  Status `json:"udp"`
-	ICMP Status `json:"icmp"`
 }
 
 func GetHostByHostname(db *badger.DB, hostname string) (*Host, error) {
@@ -111,6 +100,10 @@ func GetHostByID(db *badger.DB, id string) (*Host, error) {
 		return nil, err
 	}
 
+	if err := host.setUptimes(db); err != nil {
+		return nil, err
+	}
+
 	return &host, nil
 }
 
@@ -154,6 +147,11 @@ func GetHostsWithStatuses(db *badger.DB) ([]Host, error) {
 		if err := host.addLatestStatuses(db); err != nil {
 			return nil, err
 		}
+
+		if err := host.setUptimes(db); err != nil {
+			return nil, err
+		}
+
 		hosts[i] = host
 	}
 
@@ -214,7 +212,8 @@ func (h *Host) Save(db *badger.DB) error {
 		}
 	}
 	h.Checks = nil
-	h.LatestStatuses = nil
+	h.LatestChecks = nil
+	h.CheckUptime = nil
 
 	return db.Update(func(txn *badger.Txn) error {
 		jsonHost, _ := json.Marshal(h)
@@ -234,6 +233,12 @@ func (h *Host) Save(db *badger.DB) error {
 
 		if h.InternalIP != "" {
 			if err := txn.Set([]byte(ipPrefix+h.InternalIP), []byte(h.ID)); err != nil {
+				return err
+			}
+		}
+
+		if h.DiscoveredIP != "" {
+			if err := txn.Set([]byte(ipPrefix+h.DiscoveredIP), []byte(h.ID)); err != nil {
 				return err
 			}
 		}

@@ -7,6 +7,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func (s *Server) setupAPIEndpoints() {
+	api := s.router.Group("/api")
+	api.GET("/health", s.getHealth)
+	api.GET("/hosts", s.getHosts)
+	api.GET("/hosts/:id", s.getHost)
+}
+
 func (s *Server) getHealth(c *gin.Context) {
 	currentHost, err := models.GetCurrentHost(s.db)
 	if err != nil {

@@ -43,28 +43,6 @@ type Check struct {
 	CheckedAt         time.Time     `json:"checkedAt"`
 }
 
-type Checks []Check
-
-func (c Checks) getByType(t CheckType) Checks {
-	var checks Checks
-	for _, check := range c {
-		if check.CheckType == t {
-			checks = append(checks, check)
-		}
-	}
-	return checks
-}
-
-func (c Checks) getByNetwork(n Network) Checks {
-	var checks Checks
-	for _, check := range c {
-		if check.Network == n {
-			checks = append(checks, check)
-		}
-	}
-	return checks
-}
-
 func (h *Host) AddCheck(db *badger.DB, check *Check) error {
 	check.ID = getID()
 	check.HostID = h.ID
@@ -79,7 +57,11 @@ func (h *Host) AddCheck(db *badger.DB, check *Check) error {
 
 		// Add the latest
 		key = fmt.Sprintf("checks.%s.latest.%s.%s", h.ID, check.Network, check.CheckType)
-		return txn.Set([]byte(key), checkJSON)
+		if err := txn.Set([]byte(key), checkJSON); err != nil {
+			return err
+		}
+
+		return h.updateUptime(db, check)
 	})
 }
 
@@ -125,7 +107,7 @@ func (h *Host) addChecks(db *badger.DB) error {
 }
 
 func (h *Host) addLatestStatuses(db *badger.DB) error {
-	h.LatestStatuses = &LatestStatuses{}
+	h.LatestChecks = &ServiceChecks{}
 	return db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
@@ -145,21 +127,21 @@ func (h *Host) addLatestStatuses(db *badger.DB) error {
 			keyParts := strings.Split(string(item.Key()), ".")
 			switch fmt.Sprintf("%s.%s", keyParts[3], keyParts[4]) {
 			case "internal.HTTP":
-				h.LatestStatuses.Internal.HTTP = check.Status
+				h.LatestChecks.Internal.HTTP = []Check{check}
 			case "internal.ICMP":
-				h.LatestStatuses.Internal.ICMP = check.Status
+				h.LatestChecks.Internal.ICMP = []Check{check}
 			case "internal.TCP":
-				h.LatestStatuses.Internal.TCP = check.Status
+				h.LatestChecks.Internal.TCP = []Check{check}
 			case "internal.UDP":
-				h.LatestStatuses.Internal.UDP = check.Status
+				h.LatestChecks.Internal.UDP = []Check{check}
 			case "public.HTTP":
-				h.LatestStatuses.Public.HTTP = check.Status
+				h.LatestChecks.Public.HTTP = []Check{check}
 			case "public.ICMP":
-				h.LatestStatuses.Public.ICMP = check.Status
+				h.LatestChecks.Public.ICMP = []Check{check}
 			case "public.TCP":
-				h.LatestStatuses.Public.TCP = check.Status
+				h.LatestChecks.Public.TCP = []Check{check}
 			case "public.UDP":
-				h.LatestStatuses.Public.UDP = check.Status
+				h.LatestChecks.Public.UDP = []Check{check}
 			}
 		}
 		return nil

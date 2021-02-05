@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"regexp"
 	"time"
@@ -32,18 +33,24 @@ type serviceResponse struct {
 func (c *Checker) newHost(ip string) {
 	resp := c.checkHealth(ip)
 	if resp.errorMessage != nil {
-		c.logger.Errorf("error getting health of new host: %s", resp.errorMessage)
+		log.Printf("error getting health of new host: %s", resp.errorMessage)
 		return
 	}
 
+	var discoveredIP string
+	if ip != resp.PublicIP || ip != resp.InternalIP {
+		discoveredIP = ip
+	}
+
 	host := &models.Host{
-		Hostname:   resp.Hostname,
-		PublicIP:   resp.PublicIP,
-		InternalIP: resp.InternalIP,
+		Hostname:     resp.Hostname,
+		PublicIP:     resp.PublicIP,
+		InternalIP:   resp.InternalIP,
+		DiscoveredIP: discoveredIP,
 	}
 
 	if err := host.Save(c.db); err != nil {
-		c.logger.Errorf("error saving host (%s): %v", host.Hostname, err)
+		log.Printf("error saving host (%s): %v", host.Hostname, err)
 		return
 	}
 }
@@ -93,7 +100,7 @@ func (c *Checker) checkNetworkICMP(host models.Host, network models.Network) {
 	}
 
 	if err := host.AddCheck(c.db, check); err != nil {
-		c.logger.Errorf("error adding check: %v", err)
+		log.Printf("error adding check: %v", err)
 		return
 	}
 }
@@ -122,7 +129,7 @@ func (c *Checker) checkNetworkHTTP(host models.Host, network models.Network) {
 	check.ResponseTime = resp.responseTime
 
 	if err := host.AddCheck(c.db, check); err != nil {
-		c.logger.Errorf("error adding check: %v", err)
+		log.Printf("error adding check: %v", err)
 		return
 	}
 }
@@ -160,7 +167,7 @@ func (c *Checker) checkNetworkTCP(host models.Host, network models.Network) {
 		if len(message) > 0 {
 			var resp serviceResponse
 			if err := json.Unmarshal(message, &resp); err != nil {
-				c.logger.Errorf("error unmarshaling tcp response %s:%d %v", ip, c.cfg.ServicePort, err)
+				log.Printf("error unmarshaling tcp response %s:%d %v", ip, c.cfg.ServicePort, err)
 				return
 			}
 
@@ -175,7 +182,7 @@ func (c *Checker) checkNetworkTCP(host models.Host, network models.Network) {
 
 	check.ResponseTime = time.Since(start)
 	if err := host.AddCheck(c.db, check); err != nil {
-		c.logger.Errorf("error adding check: %v", err)
+		log.Printf("error adding check: %v", err)
 		return
 	}
 }
@@ -195,7 +202,7 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 
 	raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, c.cfg.ServicePort))
 	if err != nil {
-		c.logger.Errorf("error resolving udp addr %s:%d %v", ip, c.cfg.ServicePort, err)
+		log.Printf("error resolving udp addr %s:%d %v", ip, c.cfg.ServicePort, err)
 		return
 	}
 
@@ -209,25 +216,28 @@ func (c *Checker) checkNetworkUDP(host models.Host, network models.Network) {
 		defer conn.Close()
 		conn.SetDeadline(time.Now().Add(checkTimeout))
 
-		fmt.Fprintln(conn, "ping")
-		message, err := bufio.NewReader(conn).ReadBytes('\n')
+		// Try UDP up to 3 times before considering it a failure
+		for attempt := 0; attempt < 3; attempt++ {
+			fmt.Fprintln(conn, "ping")
+			message, err := bufio.NewReader(conn).ReadBytes('\n')
 
-		if err != nil {
-			check.CheckErrorMessage = err.Error()
-			check.Status = models.StatusError
-			check.StatusCode = 500
-		}
-
-		if len(message) > 0 && string(message) != "pong\n" {
-			check.Status = models.StatusError
-			check.StatusCode = 500
-			check.CheckErrorMessage = "wrong response"
+			if err != nil {
+				check.CheckErrorMessage = err.Error()
+				check.Status = models.StatusError
+				check.StatusCode = 500
+			} else if len(message) > 0 && string(message) != "pong\n" {
+				check.Status = models.StatusError
+				check.StatusCode = 500
+				check.CheckErrorMessage = "wrong response"
+			} else {
+				break
+			}
 		}
 	}
 
 	check.ResponseTime = time.Since(start)
 	if err := host.AddCheck(c.db, check); err != nil {
-		c.logger.Errorf("error adding check: %v", err)
+		log.Printf("error adding check: %v", err)
 		return
 	}
 }
@@ -246,13 +256,13 @@ func (c *Checker) checkHealth(host string) (checkResp healthResponse) {
 	checkResp.statusCode = resp.StatusCode
 	if resp.StatusCode > 399 {
 		checkResp.errorMessage = fmt.Errorf("error bad status response: %d", resp.StatusCode)
-		c.logger.Errorf("error bad status response: %d", resp.StatusCode)
+		log.Printf("error bad status response: %d", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		checkResp.errorMessage = err
-		c.logger.Errorf("error reading body from %s health: %v", host, err)
+		log.Printf("error reading body from %s health: %v", host, err)
 		return
 	}
 	checkResp.responseBody = string(body)
@@ -264,7 +274,7 @@ func (c *Checker) checkHealth(host string) (checkResp healthResponse) {
 
 	if err := json.Unmarshal(body, &checkResp); err != nil {
 		checkResp.errorMessage = err
-		c.logger.Errorf("error unmarshaling body into struct from %s health: %v", host, err)
+		log.Printf("error unmarshaling body into struct from %s health: %v", host, err)
 	}
 
 	return

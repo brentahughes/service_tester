@@ -2,20 +2,18 @@ package webserver
 
 import (
 	"fmt"
-	"net/http"
+	"log"
 
 	"github.com/brentahughes/service_tester/pkg/config"
-	"github.com/brentahughes/service_tester/pkg/models"
 	"github.com/dgraph-io/badger"
-	"github.com/gin-gonic/contrib/static"
 	"github.com/gin-gonic/gin"
 )
 
 type Server struct {
 	config config.Config
 	db     *badger.DB
-	logger *models.Logger
 	port   int
+	router *gin.Engine
 }
 
 type errResponse struct {
@@ -23,40 +21,28 @@ type errResponse struct {
 	Message string `json:"message"`
 }
 
-func NewServer(config config.Config, db *badger.DB, logger *models.Logger, port int) *Server {
+func NewServer(config config.Config, db *badger.DB, port int) *Server {
 	return &Server{
 		db:     db,
 		port:   port,
 		config: config,
-		logger: logger,
 	}
 }
 
 func (s *Server) Start() error {
 	gin.SetMode(gin.ReleaseMode)
 
-	r := gin.Default()
-	r.Use(gin.Recovery(), gin.Logger())
+	s.router = gin.Default()
+	s.router.Use(gin.Recovery(), gin.Logger())
+	s.setupInterfaceEndpoints()
+	s.setupAPIEndpoints()
 
-	// React Frontend
-	r.Use(static.Serve("/", static.LocalFile("./frontend/build", true)))
-	// This is a hack to make the react frontend is used for any route that wasn't defined elsewhere
-	r.NoRoute(func(c *gin.Context) {
-		http.ServeFile(c.Writer, c.Request, "./frontend/build/index.html")
-	})
-
-	// API Endpoints
-	api := r.Group("/api")
-	api.GET("/health", s.getHealth)
-	api.GET("/hosts", s.getHosts)
-	api.GET("/hosts/:id", s.getHost)
-
-	s.logger.Infof("web interface listening on :%d", s.port)
-	return r.Run(fmt.Sprintf(":%d", s.port))
+	log.Printf("web interface listening on :%d", s.port)
+	return s.router.Run(fmt.Sprintf(":%d", s.port))
 }
 
 func (s *Server) Stop() {
-	s.logger.Infof("Stopping webserver")
+	log.Printf("Stopping webserver")
 }
 
 func (s *Server) writeErr(c *gin.Context, code int, err error) {

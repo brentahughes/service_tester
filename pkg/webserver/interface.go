@@ -7,13 +7,22 @@ import (
 
 	"github.com/asdine/storm"
 	"github.com/brentahughes/service_tester/pkg/models"
+	"github.com/gin-gonic/contrib/static"
 	"github.com/gin-gonic/gin"
 )
 
 type dashboardData struct {
 	CurrentHost models.Host
 	Hosts       []models.Host
-	Logs        []models.Log
+}
+
+func (s *Server) setupInterfaceEndpoints() {
+	// React Frontend
+	s.router.Use(static.Serve("/", static.LocalFile("./frontend/build", true)))
+	// This is a hack to make the react frontend is used for any route that wasn't defined elsewhere
+	s.router.NoRoute(func(c *gin.Context) {
+		http.ServeFile(c.Writer, c.Request, "./frontend/build/index.html")
+	})
 }
 
 func (s *Server) dashboard(c *gin.Context) {
@@ -54,16 +63,9 @@ func (s *Server) dashboard(c *gin.Context) {
 		return
 	}
 
-	logs, err := models.GetLogs(s.db, 150)
-	if err != nil && err != storm.ErrNotFound {
-		s.writeErr(c, http.StatusInternalServerError, err)
-		return
-	}
-
 	o := dashboardData{
 		CurrentHost: *currentHost,
 		Hosts:       hosts,
-		Logs:        logs,
 	}
 	if err := t.ExecuteTemplate(c.Writer, "layout", o); err != nil {
 		s.writeErr(c, http.StatusInternalServerError, err)

@@ -1,6 +1,7 @@
 package servicecheck
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"time"
@@ -15,7 +16,6 @@ import (
 type Checker struct {
 	db         *badger.DB
 	cfg        *config.Config
-	logger     *models.Logger
 	pool       *ants.PoolWithFunc
 	pinger     *ping.Pinger
 	httpClient *http.Client
@@ -23,13 +23,11 @@ type Checker struct {
 
 func NewChecker(
 	db *badger.DB,
-	logger *models.Logger,
 	conf *config.Config,
 ) (*Checker, error) {
 	c := &Checker{
-		db:     db,
-		cfg:    conf,
-		logger: logger,
+		db:  db,
+		cfg: conf,
 		httpClient: &http.Client{
 			Timeout: checkTimeout,
 		},
@@ -60,7 +58,7 @@ func (c *Checker) Start() {
 }
 
 func (c *Checker) Stop() {
-	c.logger.Infof("Shutting down checker")
+	log.Printf("Shutting down checker")
 	c.httpClient.CloseIdleConnections()
 	c.pinger.Close()
 }
@@ -70,7 +68,7 @@ func (c *Checker) runCheck() {
 
 	hosts, err := models.GetHosts(c.db)
 	if err != nil {
-		c.logger.Errorf("error getting recent hosts: %v", err)
+		log.Printf("error getting recent hosts: %v", err)
 		return
 	}
 
@@ -86,14 +84,14 @@ func (c *Checker) discoverNewHosts() {
 	if c.cfg.Discovery != "" {
 		ips, err = c.discoverHosts()
 		if err != nil {
-			c.logger.Errorf("error checking discovery endpoint (%s) %v", c.cfg.Discovery, err)
+			log.Printf("error checking discovery endpoint (%s) %v", c.cfg.Discovery, err)
 			return
 		}
 	}
 
 	currentHost, err := models.GetCurrentHost(c.db)
 	if err != nil {
-		c.logger.Errorf("error getting current host %v", err)
+		log.Printf("error getting current host %v", err)
 		return
 	}
 
@@ -105,7 +103,7 @@ func (c *Checker) discoverNewHosts() {
 		host, err := models.GetHostByIP(c.db, ip)
 		if err != nil {
 			if err != badger.ErrKeyNotFound {
-				c.logger.Errorf("error looking up host by ip (%s) %v", ip, err)
+				log.Printf("error looking up host by ip (%s) %v", ip, err)
 				continue
 			}
 
@@ -114,7 +112,7 @@ func (c *Checker) discoverNewHosts() {
 		} else {
 			// Update the last seen
 			if err := host.Save(c.db); err != nil {
-				c.logger.Errorf("error updating host (%s): %v", host.Hostname, err)
+				log.Printf("error updating host (%s): %v", host.Hostname, err)
 				continue
 			}
 		}

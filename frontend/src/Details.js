@@ -65,13 +65,53 @@ function Details(props) {
 
 function OverviewHostStatus(props) {
     if (props.status === 'success') {
-        return <Button size="sm" variant="success" className="status-btn" disabled>{props.name}</Button>;
+        return <Button size="sm" variant="success" className="status-btn" disabled>{props.name}<br />{Math.round(props.uptime)}%</Button>;
     }
-    return <Button size="sm" variant="danger" className="status-btn" disabled>{props.name}</Button>;
+    return <Button size="sm" variant="danger" className="status-btn" disabled>{props.name}<br />{Math.round(props.uptime)}%</Button>;
 }
 
 
 function HostDetails(props) {
+    var statuses = {
+        public: {
+            http: "error",
+            icmp: "error",
+            tcp: "error",
+            udp: "error"
+        },
+        internal: {
+            http: "error",
+            icmp: "error",
+            tcp: "error",
+            udp: "error"
+        }
+    }
+
+    if (props.host.latestChecks.public.http) {
+        statuses.public.http = props.host.latestChecks.public.http[0].status;
+    }
+    if (props.host.latestChecks.public.icmp) {
+        statuses.public.icmp = props.host.latestChecks.public.icmp[0].status;
+    }
+    if (props.host.latestChecks.public.tcp) {
+        statuses.public.tcp = props.host.latestChecks.public.tcp[0].status;
+    }
+    if (props.host.latestChecks.public.udp) {
+        statuses.public.udp = props.host.latestChecks.public.udp[0].status;
+    }
+    if (props.host.latestChecks.internal.http) {
+        statuses.internal.http = props.host.latestChecks.internal.http[0].status;
+    }
+    if (props.host.latestChecks.internal.icmp) {
+        statuses.internal.icmp = props.host.latestChecks.internal.icmp[0].status;
+    }
+    if (props.host.latestChecks.internal.tcp) {
+        statuses.internal.tcp = props.host.latestChecks.internal.tcp[0].status;
+    }
+    if (props.host.latestChecks.internal.udp) {
+        statuses.internal.udp = props.host.latestChecks.internal.udp[0].status;
+    }
+
     return (
         <Row>
             <Container fluid>
@@ -84,20 +124,52 @@ function HostDetails(props) {
                         {props.host.publicIp}
                         <br />
                         <ButtonGroup>
-                            <OverviewHostStatus name='HTTP' status={props.host.latestStatus.public.http} />
-                            <OverviewHostStatus name='ICMP' status={props.host.latestStatus.public.icmp} />
-                            <OverviewHostStatus name='TCP' status={props.host.latestStatus.public.tcp} />
-                            <OverviewHostStatus name='UDP' status={props.host.latestStatus.public.udp} />
+                            <OverviewHostStatus
+                                name='HTTP'
+                                status={statuses.public.http}
+                                uptime={props.host.checkUptime.public.http.percent}
+                            />
+                            <OverviewHostStatus
+                                name='ICMP'
+                                status={statuses.public.icmp}
+                                uptime={props.host.checkUptime.public.icmp.percent}
+                            />
+                            <OverviewHostStatus
+                                name='TCP'
+                                status={statuses.public.tcp}
+                                uptime={props.host.checkUptime.public.tcp.percent}
+                            />
+                            <OverviewHostStatus
+                                name='UDP'
+                                status={statuses.public.udp}
+                                uptime={props.host.checkUptime.public.udp.percent}
+                            />
                         </ButtonGroup>
                     </Col>
                     <Col lg={6} className="text-center">
                         {props.host.internalIp}
                         <br />
                         <ButtonGroup>
-                            <OverviewHostStatus name='HTTP' status={props.host.latestStatus.internal.http} />
-                            <OverviewHostStatus name='ICMP' status={props.host.latestStatus.internal.icmp} />
-                            <OverviewHostStatus name='TCP' status={props.host.latestStatus.internal.tcp} />
-                            <OverviewHostStatus name='UDP' status={props.host.latestStatus.internal.udp} />
+                            <OverviewHostStatus
+                                name='HTTP'
+                                status={statuses.internal.http}
+                                uptime={props.host.checkUptime.internal.http.percent}
+                            />
+                            <OverviewHostStatus
+                                name='ICMP'
+                                status={statuses.internal.icmp}
+                                uptime={props.host.checkUptime.internal.icmp.percent}
+                            />
+                            <OverviewHostStatus
+                                name='TCP'
+                                status={statuses.internal.tcp}
+                                uptime={props.host.checkUptime.internal.tcp.percent}
+                            />
+                            <OverviewHostStatus
+                                name='UDP'
+                                status={statuses.internal.udp}
+                                uptime={props.host.checkUptime.internal.udp.percent}
+                            />
                         </ButtonGroup>
                     </Col>
                 </Row>
@@ -110,19 +182,23 @@ function Graph(props) {
     let publicData = [];
     let internalData = [];
 
-    props.checksPublic.forEach(item => {
-        publicData.push({
-            t: moment.unix(parseInt(moment(item.checkedAt).format("X"))),
-            y: item.status === "success" ? parseInt(item.responseTime / 1000 / 1000) : 0
+    if (props.checksPublic) {
+        props.checksPublic.forEach(item => {
+            publicData.push({
+                t: moment.unix(parseInt(moment(item.checkedAt).format("X"))),
+                y: item.status === "success" ? parseInt(item.responseTime / 1000 / 1000) : null
+            });
         });
-    });
+    }
 
-    props.checksInternal.forEach(item => {
-        internalData.push({
-            t: moment.unix(parseInt(moment(item.checkedAt).format("X"))),
-            y: item.status === "success" ? parseInt(item.responseTime / 1000 / 1000) : 0
+    if (props.checksInternal) {
+        props.checksInternal.forEach(item => {
+            internalData.push({
+                t: moment.unix(parseInt(moment(item.checkedAt).format("X"))),
+                y: item.status === "success" ? parseInt(item.responseTime / 1000 / 1000) : null
+            });
         });
-    });
+    }
 
     let options = {
         title: {

@@ -42,20 +42,10 @@ func GetCurrentHost(db *badger.DB) (*Host, error) {
 	host.ServiceUptime = time.Since(host.ServiceLastStart).Truncate(time.Second)
 	host.HostUptime = uptimeDur
 
-	hosts, err := GetHosts(db)
-	if err != nil {
-		return nil, err
-	}
-
-	host.DiscoveredHosts = make([]string, len(hosts))
-	for i, h := range hosts {
-		host.DiscoveredHosts[i] = h.Hostname
-	}
-
 	return &host, nil
 }
 
-func UpdateCurrentHost(db *badger.DB, conf *config.Config) error {
+func UpdateCurrentHost(db *badger.DB, conf *config.Config, init bool) error {
 	host, err := GetCurrentHost(db)
 	if err != nil && err != badger.ErrKeyNotFound {
 		return err
@@ -80,15 +70,24 @@ func UpdateCurrentHost(db *badger.DB, conf *config.Config) error {
 		return err
 	}
 
-	host.Hostname = hostname
-	host.InternalIP = internal
-	host.PublicIP = public
-	host.ServiceLastStart = time.Now().UTC()
-	host.ServiceRestarts++
+	if host.Hostname != hostname {
+		host.Hostname = hostname
+	}
+	if host.InternalIP != internal {
+		host.InternalIP = internal
+	}
+	if host.PublicIP != public {
+		host.PublicIP = public
+	}
+
+	if init {
+		host.ServiceLastStart = time.Now().UTC()
+		host.ServiceRestarts++
+	}
 
 	return db.Update(func(txn *badger.Txn) error {
-		hostJson, _ := json.Marshal(host)
-		return txn.Set([]byte(hostsPrefix+host.ID), hostJson)
+		hostJSON, _ := json.Marshal(host)
+		return txn.Set([]byte(hostsPrefix+host.ID), hostJSON)
 	})
 }
 

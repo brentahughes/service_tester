@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"errors"
 	"os"
 	"strconv"
@@ -42,6 +43,21 @@ func LoadEnvConfig() (*Config, error) {
 
 	host := os.Getenv("SERVICE_HOSTS")
 	hosts := strings.Split(host, ",")
+
+	// If SERVICE_HOSTS is a file load the ips from the file
+	// Should be a plain text file of ips
+	if _, err := os.Stat(host); err == nil {
+		f, err := os.Open(host)
+		if err != nil {
+			return nil, err
+		}
+
+		hosts = make([]string, 0)
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			hosts = append(hosts, scanner.Text())
+		}
+	}
 
 	discoveryURL := os.Getenv("DISCOVERY_NAME")
 	if discoveryURL == "" && len(hosts) == 0 {

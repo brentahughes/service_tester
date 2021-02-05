@@ -10,6 +10,7 @@ import moment from 'moment';
 import {Link} from "react-router-dom";
 import 'moment-duration-format';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import './Overview.css';
 
 function OverviewBanner(props) {
     return (
@@ -21,16 +22,6 @@ function OverviewBanner(props) {
                 <Row>
                     <Col sm={4} className="text-center">
                         <b>Hostname</b><br />{props.currentHost.hostname}<br /><br />
-                    </Col>
-                    <Col sm={4} className="text-center">
-                        <b>Service Restarts</b><br />{props.currentHost.serviceRestarts}<br /><br />
-                    </Col>
-                    <Col sm={4} className="text-center">
-                        <b>First Start</b>
-                        <br />
-                        <Moment format="YYYY-MM-DD HH:mm:ss" date={props.currentHost.serviceFirstStart} /> UTC
-                        <br />
-                        <br />
                     </Col>
                     <Col sm={4} className="text-center">
                         <b>Host Uptime</b>
@@ -46,13 +37,6 @@ function OverviewBanner(props) {
                         <br />
                         <br />
                     </Col>
-                    <Col sm={4} className="text-center">
-                        <b>Last Start</b>
-                        <br />
-                        <Moment format="YYYY-MM-DD HH:mm:ss" date={props.currentHost.serviceLastStart} /> UTC
-                        <br />
-                        <br />
-                    </Col>
                 </Row>
             </Container>
         </Container>
@@ -61,12 +45,65 @@ function OverviewBanner(props) {
 
 function OverviewHostStatus(props) {
     if (props.status === 'success') {
-        return <Button size="sm" variant="success" className="status-btn" disabled>{props.name}</Button>;
+        return <Button size="sm" variant="success" className="status-btn" disabled>{props.name}<br />{Math.round(props.uptime)}%</Button>;
     }
-    return <Button size="sm" variant="danger" className="status-btn" disabled>{props.name}</Button>;
+    return <Button size="sm" variant="danger" className="status-btn" disabled>{props.name}<br />{Math.round(props.uptime)}%</Button>;
+}
+
+function OverviewUptime(props) {
+    var variant = "success";
+    if (props.uptime < 90) {
+        variant = "warning";
+    }
+    if (props.uptime < 50) {
+        variant = "danger";
+    }
+
+    return <Button size="sm" variant={variant} className="status-btn" disabled>{Math.round(props.uptime)}%</Button>;
 }
 
 function OverviewHost(props) {
+    var statuses = {
+        public: {
+            http: "error",
+            icmp: "error",
+            tcp: "error",
+            udp: "error"
+        },
+        internal: {
+            http: "error",
+            icmp: "error",
+            tcp: "error",
+            udp: "error"
+        }
+    }
+
+    if (props.host.latestChecks.public.http) {
+        statuses.public.http = props.host.latestChecks.public.http[0].status;
+    }
+    if (props.host.latestChecks.public.icmp) {
+        statuses.public.icmp = props.host.latestChecks.public.icmp[0].status;
+    }
+    if (props.host.latestChecks.public.tcp) {
+        statuses.public.tcp = props.host.latestChecks.public.tcp[0].status;
+    }
+    if (props.host.latestChecks.public.udp) {
+        statuses.public.udp = props.host.latestChecks.public.udp[0].status;
+    }
+
+    if (props.host.latestChecks.internal.http) {
+        statuses.internal.http = props.host.latestChecks.internal.http[0].status;
+    }
+    if (props.host.latestChecks.internal.icmp) {
+        statuses.internal.icmp = props.host.latestChecks.internal.icmp[0].status;
+    }
+    if (props.host.latestChecks.internal.tcp) {
+        statuses.internal.tcp = props.host.latestChecks.internal.tcp[0].status;
+    }
+    if (props.host.latestChecks.internal.udp) {
+        statuses.internal.udp = props.host.latestChecks.internal.udp[0].status;
+    }
+
     return (
         <tr>
             <td>
@@ -82,10 +119,26 @@ function OverviewHost(props) {
                     <Col lg={4}>{props.host.publicIp}</Col>
                     <Col lg={8}>
                         <ButtonGroup>
-                            <OverviewHostStatus name='HTTP' status={props.host.latestStatus.public.http} />
-                            <OverviewHostStatus name='ICMP' status={props.host.latestStatus.public.icmp} />
-                            <OverviewHostStatus name='TCP' status={props.host.latestStatus.public.tcp} />
-                            <OverviewHostStatus name='UDP' status={props.host.latestStatus.public.udp} />
+                            <OverviewHostStatus
+                                name='HTTP'
+                                status={statuses.public.http}
+                                uptime={props.host.checkUptime.public.http.percent}
+                            />
+                            <OverviewHostStatus
+                                name='ICMP'
+                                status={statuses.public.icmp}
+                                uptime={props.host.checkUptime.public.icmp.percent}
+                            />
+                            <OverviewHostStatus
+                                name='TCP'
+                                status={statuses.public.tcp}
+                                uptime={props.host.checkUptime.public.tcp.percent}
+                            />
+                            <OverviewHostStatus
+                                name='UDP'
+                                status={statuses.public.udp}
+                                uptime={props.host.checkUptime.public.udp.percent}
+                            />
                         </ButtonGroup>
                     </Col>
                 </Row>
@@ -95,10 +148,26 @@ function OverviewHost(props) {
                     <Col lg={4}>{props.host.internalIp}</Col>
                     <Col lg={8}>
                         <ButtonGroup>
-                            <OverviewHostStatus name='HTTP' status={props.host.latestStatus.internal.http} />
-                            <OverviewHostStatus name='ICMP' status={props.host.latestStatus.internal.icmp} />
-                            <OverviewHostStatus name='TCP' status={props.host.latestStatus.internal.tcp} />
-                            <OverviewHostStatus name='UDP' status={props.host.latestStatus.internal.udp} />
+                            <OverviewHostStatus
+                                name='HTTP'
+                                status={statuses.internal.http}
+                                uptime={props.host.checkUptime.internal.http.percent}
+                            />
+                            <OverviewHostStatus
+                                name='ICMP'
+                                status={statuses.internal.icmp}
+                                uptime={props.host.checkUptime.internal.icmp.percent}
+                            />
+                            <OverviewHostStatus
+                                name='TCP'
+                                status={statuses.internal.tcp}
+                                uptime={props.host.checkUptime.internal.tcp.percent}
+                            />
+                            <OverviewHostStatus
+                                name='UDP'
+                                status={statuses.internal.udp}
+                                uptime={props.host.checkUptime.internal.udp.percent}
+                            />
                         </ButtonGroup>
                     </Col>
                 </Row>

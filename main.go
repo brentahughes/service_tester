@@ -1,10 +1,13 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
+	"time"
 
 	conf "github.com/brentahughes/service_tester/pkg/config"
 	"github.com/brentahughes/service_tester/pkg/models"
@@ -14,35 +17,48 @@ import (
 	"github.com/dgraph-io/badger"
 )
 
+var (
+	cpuProfile = flag.Bool("prof.cpu", false, "")
+	memProfile = flag.Bool("prof.mem", false, "")
+)
+
 func main() {
+	flag.Parse()
+
+	if *cpuProfile {
+		cpuF, err := os.Create("cpu.prof")
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(cpuF)
+		defer pprof.StopCPUProfile()
+	}
+
 	c, err := conf.LoadEnvConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	db, err := badger.Open(badger.DefaultOptions(".db"))
+	opts := badger.DefaultOptions(".db").WithSyncWrites(false)
+	db, err := badger.Open(opts)
 	if err != nil {
 		log.Fatal("error opening database: ", err)
 	}
 	defer db.Close()
 
-	logger := models.NewLogger(db)
+	go keepCurrentHostUpdated(db, c)
 
-	if err := models.UpdateCurrentHost(db, c); err != nil {
-		log.Fatal("Error updating current host: ", err)
-	}
-
-	s := service.NewService(logger, c.ServicePort)
+	s := service.NewService(c.ServicePort)
 	go s.Start()
 
-	checker, err := servicecheck.NewChecker(db, logger, c)
+	checker, err := servicecheck.NewChecker(db, c)
 	if err != nil {
 		log.Fatal(err)
 	}
 	go checker.Start()
 	defer checker.Stop()
 
-	server := webserver.NewServer(*c, db, logger, c.Port)
+	server := webserver.NewServer(*c, db, c.Port)
 	go func() {
 		if err := server.Start(); err != nil {
 			log.Fatal("error starting web interface", err)
@@ -53,5 +69,27 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
-	logger.Infof("Shutdown signal received")
+	log.Printf("Shutdown signal received")
+
+	if *memProfile {
+		memF, err := os.Create("mem.prof")
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.WriteHeapProfile(memF)
+		memF.Close()
+	}
+}
+
+func keepCurrentHostUpdated(db *badger.DB, c *conf.Config) {
+	if err := models.UpdateCurrentHost(db, c, true); err != nil {
+		log.Fatal("Error updating current host: ", err)
+	}
+
+	t := time.NewTicker(time.Hour)
+	for range t.C {
+		if err := models.UpdateCurrentHost(db, c, false); err != nil {
+			log.Println("Error updating current host: ", err)
+		}
+	}
 }
