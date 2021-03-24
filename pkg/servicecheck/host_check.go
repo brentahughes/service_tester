@@ -7,10 +7,12 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"regexp"
 	"time"
 
 	"github.com/brentahughes/service_tester/pkg/models"
+	"github.com/dgraph-io/badger"
 )
 
 const checkTimeout = 3 * time.Second
@@ -47,6 +49,7 @@ func (c *Checker) newHost(ip string) {
 		PublicIP:     resp.PublicIP,
 		InternalIP:   resp.InternalIP,
 		DiscoveredIP: discoveredIP,
+		CityCode:     resp.CityCode,
 	}
 
 	if err := host.Save(c.db); err != nil {
@@ -71,6 +74,12 @@ func (c *Checker) checkHost(input interface{}) {
 		c.checkNetworkTCP(host, models.NetworkInternal)
 		c.checkNetworkUDP(host, models.NetworkInternal)
 	}
+
+	// Get list of hosts known by the current checked host and add them if not known
+	if err := c.checkForNewHosts(host.PublicIP); err != nil {
+		log.Printf("error getting new hosts from %s", host)
+		return
+	}
 }
 
 func (c *Checker) checkNetworkICMP(host models.Host, network models.Network) {
@@ -93,8 +102,13 @@ func (c *Checker) checkNetworkICMP(host models.Host, network models.Network) {
 
 	duration, err := c.pinger.Ping(parsedIP, checkTimeout)
 	if err != nil {
-		check.Status = models.StatusError
-		check.StatusCode = 500
+		if err == errPingDisabled {
+			check.Status = models.StatusUnknown
+			check.StatusCode = http.StatusNotImplemented
+		} else {
+			check.Status = models.StatusError
+			check.StatusCode = http.StatusInternalServerError
+		}
 	} else {
 		check.ResponseTime = duration
 	}
@@ -278,4 +292,36 @@ func (c *Checker) checkHealth(host string) (checkResp healthResponse) {
 	}
 
 	return
+}
+
+// checkForNewHosts will call /api/hosts on the target host and add any hosts that are not currently known
+func (c *Checker) checkForNewHosts(host string) error {
+	resp, err := c.httpClient.Get(fmt.Sprintf("http://%s/api/hosts", host))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var hosts []models.Host
+	if err := json.Unmarshal(body, &hosts); err != nil {
+		return err
+	}
+
+	for _, h := range hosts {
+		if _, err := models.GetHostByIP(c.db, h.PublicIP); err != nil {
+			if err != badger.ErrKeyNotFound {
+				return err
+			}
+
+			log.Printf("adding new host %s", h.PublicIP)
+			c.newHost(h.PublicIP)
+		}
+	}
+
+	return nil
 }

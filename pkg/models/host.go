@@ -32,6 +32,7 @@ type Host struct {
 	LatestChecks      *ServiceChecks `json:"latestChecks,omitempty"`
 	Checks            *ServiceChecks `json:"checks,omitempty"`
 	CheckUptime       *CheckUptime   `json:"checkUptime"`
+	CityCode          string         `json:"cityCode,omitempty"`
 }
 
 type ServiceChecks struct {

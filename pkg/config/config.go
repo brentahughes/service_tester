@@ -3,10 +3,20 @@ package config
 import (
 	"bufio"
 	"errors"
+	"flag"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+)
+
+var (
+	webPort        = flag.Int("web.port", 80, "Port to use for the web and api interface")
+	servicePort    = flag.Int("service.port", 5500, "Port to use for the service endpoint")
+	serviceHosts   = flag.String("service.hosts", "", "Comma serparated list of hosts or file with hosts listed one per line to use for testing")
+	discoveryName  = flag.String("discovery.name", "", "DNS name for A record containing list of host ips")
+	parallelChecks = flag.Int("check.parallel", 20, "Number of checks to run in parallel at any time")
+	checkInterval  = flag.Duration("check.interval", 10*time.Second, "Time between checking each host")
 )
 
 type Config struct {
@@ -20,11 +30,15 @@ type Config struct {
 	ParallelChecks int
 }
 
+func Init() {
+	flag.Parse()
+}
+
 func LoadEnvConfig() (*Config, error) {
 	var err error
 
 	portStr := os.Getenv("WEB_INTERFACE_PORT")
-	port := 80
+	port := *webPort
 	if portStr != "" {
 		port, err = strconv.Atoi(portStr)
 		if err != nil {
@@ -33,7 +47,7 @@ func LoadEnvConfig() (*Config, error) {
 	}
 
 	servicePortStr := os.Getenv("SERVICE_PORT")
-	servicePort := 5500
+	servicePort := *servicePort
 	if servicePortStr != "" {
 		servicePort, err = strconv.Atoi(servicePortStr)
 		if err != nil {
@@ -42,6 +56,9 @@ func LoadEnvConfig() (*Config, error) {
 	}
 
 	host := os.Getenv("SERVICE_HOSTS")
+	if host == "" {
+		host = *serviceHosts
+	}
 	hosts := strings.Split(host, ",")
 
 	// If SERVICE_HOSTS is a file load the ips from the file
@@ -60,12 +77,15 @@ func LoadEnvConfig() (*Config, error) {
 	}
 
 	discoveryURL := os.Getenv("DISCOVERY_NAME")
+	if discoveryURL == "" {
+		discoveryURL = *discoveryName
+	}
 	if discoveryURL == "" && len(hosts) == 0 {
 		return nil, errors.New("no DISCOVERY_NAME defined")
 	}
 
 	parallelChecksStr := os.Getenv("PARALLEL_CHECKS")
-	parallelChecks := 20
+	parallelChecks := *parallelChecks
 	if parallelChecksStr != "" {
 		parallelChecks, err = strconv.Atoi(parallelChecksStr)
 		if err != nil {
@@ -74,7 +94,7 @@ func LoadEnvConfig() (*Config, error) {
 	}
 
 	checkIntervalStr := os.Getenv("CHECK_INTERVAL")
-	checkInterval := 10 * time.Second
+	checkInterval := *checkInterval
 	if checkIntervalStr != "" {
 		checkInterval, err = time.ParseDuration(checkIntervalStr)
 		if err != nil {

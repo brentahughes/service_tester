@@ -16,6 +16,7 @@ const (
 
 	StatusSuccess Status = "success"
 	StatusError   Status = "error"
+	StatusUnknown Status = "unknown"
 
 	NetworkInternal Network = "internal"
 	NetworkPublic   Network = "public"

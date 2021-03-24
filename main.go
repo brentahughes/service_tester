@@ -1,11 +1,9 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
 	"os/signal"
-	"runtime/pprof"
 	"syscall"
 	"time"
 
@@ -17,23 +15,10 @@ import (
 	"github.com/dgraph-io/badger"
 )
 
-var (
-	cpuProfile = flag.Bool("prof.cpu", false, "")
-	memProfile = flag.Bool("prof.mem", false, "")
-)
-
+func init() {
+	conf.Init()
+}
 func main() {
-	flag.Parse()
-
-	if *cpuProfile {
-		cpuF, err := os.Create("cpu.prof")
-		if err != nil {
-			log.Fatal(err)
-		}
-		pprof.StartCPUProfile(cpuF)
-		defer pprof.StopCPUProfile()
-	}
-
 	c, err := conf.LoadEnvConfig()
 	if err != nil {
 		log.Fatal(err)
@@ -70,15 +55,6 @@ func main() {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
 	log.Printf("Shutdown signal received")
-
-	if *memProfile {
-		memF, err := os.Create("mem.prof")
-		if err != nil {
-			log.Fatal(err)
-		}
-		pprof.WriteHeapProfile(memF)
-		memF.Close()
-	}
 }
 
 func keepCurrentHostUpdated(db *badger.DB, c *conf.Config) {

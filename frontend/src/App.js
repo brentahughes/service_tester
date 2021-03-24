@@ -34,7 +34,11 @@ function App() {
       .then(res => res.json())
       .then(
         (result) => {
-          setHosts(result);
+          if (result) {
+            setHosts(result);
+          } else {
+            setHosts([]);
+          }
         },
         (error) => {
           setError(error);

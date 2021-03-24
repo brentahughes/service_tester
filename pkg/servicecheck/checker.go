@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/brentahughes/service_tester/pkg/config"
@@ -17,7 +18,7 @@ type Checker struct {
 	db         *badger.DB
 	cfg        *config.Config
 	pool       *ants.PoolWithFunc
-	pinger     *ping.Pinger
+	pinger     pinger
 	httpClient *http.Client
 }
 
@@ -39,11 +40,16 @@ func NewChecker(
 	}
 	c.pool = pool
 
-	pinger, err := ping.New("0.0.0.0", "")
+	var p pinger
+	p, err = ping.New("0.0.0.0", "")
 	if err != nil {
-		return nil, err
+		if opErr, ok := err.(*net.OpError); ok && strings.Contains(opErr.Err.Error(), "operation not permitted") {
+			p = &pingNoOp{}
+		} else {
+			return nil, err
+		}
 	}
-	c.pinger = pinger
+	c.pinger = p
 
 	return c, nil
 }

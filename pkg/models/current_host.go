@@ -57,6 +57,7 @@ func UpdateCurrentHost(db *badger.DB, conf *config.Config, init bool) error {
 			CurrentHost:       true,
 			ServiceRestarts:   -1,
 			ServiceFirstStart: time.Now().UTC(),
+			CityCode:          os.Getenv("MY_CITY_CODE"),
 		}
 	}
 
