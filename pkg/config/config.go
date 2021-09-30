@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+// Downward API environment variables
+const (
+	cityCode  = "CITY_CODE"
+	longitude = "LONGITUDE"
+	latitude  = "LATITUDE"
+)
+
 var (
 	webPort        = flag.Int("web.port", 80, "Port to use for the web and api interface")
 	servicePort    = flag.Int("service.port", 5500, "Port to use for the service endpoint")
@@ -28,6 +35,13 @@ type Config struct {
 	InternalPDNS   string
 	CheckInterval  time.Duration
 	ParallelChecks int
+	DownwardAPI    DownwardAPIDetails
+}
+
+type DownwardAPIDetails struct {
+	CityCode  string
+	Longitude string
+	Latitude  string
 }
 
 func Init() {
@@ -114,5 +128,10 @@ func LoadEnvConfig() (*Config, error) {
 		PublicIPDNS:    publicIP,
 		ParallelChecks: parallelChecks,
 		Hosts:          hosts,
+		DownwardAPI: DownwardAPIDetails{
+			CityCode:  os.Getenv(cityCode),
+			Longitude: os.Getenv(longitude),
+			Latitude:  os.Getenv(latitude),
+		},
 	}, nil
 }

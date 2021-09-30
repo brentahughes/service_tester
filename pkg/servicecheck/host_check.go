@@ -44,13 +44,8 @@ func (c *Checker) newHost(ip string) {
 		discoveredIP = ip
 	}
 
-	host := &models.Host{
-		Hostname:     resp.Hostname,
-		PublicIP:     resp.PublicIP,
-		InternalIP:   resp.InternalIP,
-		DiscoveredIP: discoveredIP,
-		CityCode:     resp.CityCode,
-	}
+	host := resp.Host
+	host.DiscoveredIP = discoveredIP
 
 	if err := host.Save(c.db); err != nil {
 		log.Printf("error saving host (%s): %v", host.Hostname, err)

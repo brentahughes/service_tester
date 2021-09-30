@@ -33,6 +33,8 @@ type Host struct {
 	Checks            *ServiceChecks `json:"checks,omitempty"`
 	CheckUptime       *CheckUptime   `json:"checkUptime"`
 	CityCode          string         `json:"cityCode,omitempty"`
+	Longitude         string         `json:"longitude,omitempty"`
+	Latitude          string         `json:"latitude,omitempty"`
 }
 
 type ServiceChecks struct {
